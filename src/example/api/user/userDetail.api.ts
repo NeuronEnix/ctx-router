@@ -1,5 +1,4 @@
-import { TCtx, USER_ROLE } from "../../..";
-import { ctxErr } from "../../../ctx/ctx.err";
+import { TCtx, USER_ROLE, ctxErr } from "../../router";
 
 export async function execute(reqData: TReqData): Promise<TResData> {
   return {
@@ -13,9 +12,9 @@ export async function execute(reqData: TReqData): Promise<TResData> {
 export async function auth(ctx: TCtx): Promise<TCtx> {
   // authenticate the request, and return the context if the request is authenticated
   // await authRequest(ctx);
-  if (ctx.user.role.includes(USER_ROLE.user)) return ctx;
-  if (ctx.user.role.includes(USER_ROLE.admin)) return ctx;
-  throw ctxErr.general.notAuthorized();
+  if (ctx.user.role.includes(USER_ROLE.USER)) return ctx;
+  if (ctx.user.role.includes(USER_ROLE.ADMIN)) return ctx;
+  throw ctxErr.auth.UNAUTHORIZED();
 }
 
 export async function validate(ctx: TCtx): Promise<TReqData> {

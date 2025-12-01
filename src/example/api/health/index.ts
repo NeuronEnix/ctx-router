@@ -1,4 +1,4 @@
-import { TCtx } from "../../..";
+import { TCtx } from "../../router";
 
 import * as healthPing from "./healthPing.api";
 

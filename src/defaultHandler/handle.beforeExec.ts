@@ -1,6 +1,6 @@
-import { TCtx } from "../ctx/ctx.types";
+import { TDefaultCtx } from "../ctx/ctx.types";
 
-export async function handleBeforeExec<TContext extends TCtx>(
+export async function handleBeforeExec<TContext extends TDefaultCtx>(
   ctx: TContext
 ): Promise<TContext> {
   const reqPath = `${ctx.req.method} ${ctx.req.path}`;

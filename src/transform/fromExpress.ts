@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { TCtx } from "../ctx/ctx.types";
+import { TDefaultCtx } from "../ctx/ctx.types";
 import { buildCtx } from ".";
 
 function getPath(url: string): string {
@@ -8,7 +8,7 @@ function getPath(url: string): string {
   return url.substring(0, queryParamPos);
 }
 
-export function transformFromExpress(req: Request): TCtx {
+export function transformFromExpress(req: Request): TDefaultCtx {
   const ctx = buildCtx({
     method: req.method,
     path: getPath(req.url),

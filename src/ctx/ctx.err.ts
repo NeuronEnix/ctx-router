@@ -20,37 +20,34 @@ export class CtxError extends Error {
 
 type TResErr = Partial<Pick<TCtxError, "data" | "info" | "msg">>;
 
-export namespace ctxErr {
-  export const general = {
-    unknown: (e?: TResErr) =>
-      new CtxError({
-        name: "UNKNOWN_ERROR",
-        msg: "Something went wrong",
-        ...e,
-      }),
-    responseNotSet: (e?: TResErr) =>
-      new CtxError({
-        name: "RESPONSE_NOT_SET",
-        msg: "Response not set",
-        ...e,
-      }),
-    malformedRequestData: (e?: TResErr) =>
-      new CtxError({
-        name: "MALFORMED_REQUEST_DATA",
-        msg: "Malformed request data",
-        ...e,
-      }),
-    handlerNotFound: (e?: TResErr) =>
-      new CtxError({
-        name: "HANDLER_NOT_FOUND",
-        msg: "Handler not found",
-        ...e,
-      }),
-    notAuthorized: (e?: TResErr) =>
-      new CtxError({
-        name: "NOT_AUTHORIZED",
-        msg: "Not authorized",
-        ...e,
-      }),
+// Factory function to create error instances
+function createError(key: string, msg: string, e?: TResErr): CtxError {
+  return new CtxError({
+    name: key,
+    msg: msg,
+    ...e,
+  });
+}
+
+export function ctxErrMap<T extends Record<string, Record<string, string>>>(
+  errKeyMsg: T
+) {
+  return Object.fromEntries(
+    Object.keys(errKeyMsg).map((category) => [
+      category,
+      Object.fromEntries(
+        Object.keys(
+          errKeyMsg[category as keyof T] as Record<string, string>
+        ).map((key) => [
+          key,
+          (e?: TResErr) =>
+            createError(key, errKeyMsg[category as keyof T]![key] as string, e),
+        ])
+      ),
+    ])
+  ) as {
+    [K in keyof T]: {
+      [P in keyof T[K]]: (e?: TResErr) => CtxError;
+    };
   };
 }

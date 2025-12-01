@@ -1,8 +1,8 @@
 export const USER_ROLE = {
-  user: "user",
-  admin: "admin",
-  server: "server",
-  none: "none",
+  USER: "USER",
+  ADMIN: "ADMIN",
+  SERVER: "SERVER",
+  NONE: "NONE",
 } as const;
 
 type CtxReq = {
@@ -68,7 +68,7 @@ type CtxMeta = {
   };
   log: {
     stdout: string[];
-    db: string[];
+    db: { q: string; p: unknown[]; ms: number }[];
   };
 };
 
@@ -76,10 +76,11 @@ type CtxUser = {
   id: string;
   role: Array<keyof typeof USER_ROLE>;
   scope: string[];
+  name: string | null;
   auth: { token: string; refresh: string };
 };
 
-export type TCtx = {
+export type TDefaultCtx = {
   id: string;
   req: CtxReq;
   res: CtxRes;

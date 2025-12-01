@@ -1,4 +1,4 @@
-import { TCtx } from "../../..";
+import { TCtx } from "../../router";
 
 import * as userUpdate from "./userUpdate.api";
 import * as userDetail from "./userDetail.api";

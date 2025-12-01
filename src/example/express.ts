@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
-import { toCtx, TCtx } from "..";
-import { router } from "./router";
+import { toCtx } from "..";
+import { router, TCtx } from "./router";
 
 const app = express();
 

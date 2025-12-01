@@ -1,7 +1,7 @@
-import { CtxError, ctxErr } from "../ctx/ctx.err";
-import { TCtx } from "../ctx/ctx.types";
+import { CtxError } from "../ctx/ctx.err";
+import { TDefaultCtx } from "../ctx/ctx.types";
 
-export async function handleOnError<TContext extends TCtx>(
+export async function handleOnError<TContext extends TDefaultCtx>(
   ctx: TContext,
   e: CtxError | Error | unknown
 ): Promise<TContext> {
@@ -26,7 +26,10 @@ export async function handleOnError<TContext extends TCtx>(
 
   // ideally should never come here, god forbid it did
   console.log("CtxError:unknown:fatal", e);
-  const error = ctxErr.general.unknown();
+  const error = new CtxError({
+    name: "UNKNOWN_ERROR",
+    msg: "Something went wrong",
+  });
   ctx.res = {
     code: error.name,
     msg: error.message,

@@ -1,4 +1,4 @@
-import { TCtx } from "../../..";
+import { TCtx } from "../../router";
 
 export async function execute(reqData: TReqData): Promise<TResData> {
   const pongAt = new Date();
@@ -9,18 +9,10 @@ export async function execute(reqData: TReqData): Promise<TResData> {
 }
 
 export async function auth(ctx: TCtx): Promise<TCtx> {
-  // authenticate the request, and return the context if the request is authenticated
-  // await (ctx);
-  // Temporarily bypass authentication for testing
   return ctx;
-  // if (USER_ROLE.user === ctx.user.role) return ctx;
-  // if (USER_ROLE.admin === ctx.user.role) return ctx;
-  // if (USER_ROLE.server === ctx.user.role) return ctx;
-  // throw ctxErr.general.notAuthorized();
 }
 
 export async function validate(ctx: TCtx): Promise<TReqData> {
-  // Validate request data and return the request data
   return ctx.req.data as TReqData;
 }
 

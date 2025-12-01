@@ -1,20 +1,20 @@
 import { handleBeforeExec } from "../defaultHandler/handle.beforeExec";
 import { handleOnError } from "../defaultHandler/handle.onError";
-import { ctxErr, CtxError } from "./ctx.err";
-import { TCtx } from "./ctx.types";
+import { CtxError } from "./ctx.err";
+import { TDefaultCtx as TDefaultCtx } from "./ctx.types";
 import { RedisClientType } from "@redis/client";
 
-type TRouteObj<TContext extends TCtx> = Record<
+type TRouteObj<TContext extends TDefaultCtx> = Record<
   string,
   Record<string, (ctx: TContext) => Promise<TContext>>
 >;
 type THooks = {
-  beforeExec<TContext extends TCtx>(ctx: TContext): Promise<TContext>;
-  onError<TContext extends TCtx>(
+  beforeExec<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
+  onError<TContext extends TDefaultCtx>(
     ctx: TContext,
     error: CtxError | Error | unknown
   ): Promise<TContext>;
-  onFinally<TContext extends TCtx>(ctx: TContext): Promise<TContext>;
+  onFinally<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
 };
 
 type CtxRouterConfig = {
@@ -22,7 +22,7 @@ type CtxRouterConfig = {
   stream?: { redisClient: RedisClientType; key: string };
 };
 const ogLog = console.log;
-export class CtxRouter<TContext extends TCtx> {
+export class CtxRouter<TContext extends TDefaultCtx> {
   private routeObj: TRouteObj<TContext> = {};
   private hooks: THooks;
   private consoleLogList: unknown[] = [];
@@ -81,7 +81,9 @@ export class CtxRouter<TContext extends TCtx> {
       await this.hooks.beforeExec(ctx);
       const handler = this.routeObj[ctx.req.method]?.[ctx.req.path];
       if (!handler) {
-        throw ctxErr.general.handlerNotFound({
+        throw new CtxError({
+          name: "HANDLER_NOT_FOUND",
+          msg: "Handler not found",
           data: { method: ctx.req.method, path: ctx.req.path },
         });
       }

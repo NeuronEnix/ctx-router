@@ -1,9 +1,9 @@
 import crypto from "crypto";
-import { TCtx, USER_ROLE } from "../ctx/ctx.types";
-
+import { TDefaultCtx } from "../ctx/ctx.types";
+const instanceId = crypto.randomBytes(5).toString("hex");
 const INSTANCE = {
-  ID: crypto.randomBytes(5).toString("hex"),
-  TRACE_ID: crypto.randomBytes(5).toString("hex"),
+  ID: instanceId,
+  TRACE_ID: instanceId,
   CREATED_AT: new Date(),
   SERVICE_NAME: process.env.SERVICE_NAME || "my-service",
   SEQ: 0,
@@ -30,7 +30,7 @@ export function buildCtx(ctxRaw: TCtxBuild) {
   return { id, meta, req, user, res };
 }
 
-export async function doneCtx(ctx: TCtx): Promise<void> {
+export async function doneCtx(ctx: TDefaultCtx): Promise<void> {
   ctx.meta.ts.out = new Date();
   ctx.meta.ts.execTime = ctx.meta.ts.out.getTime() - ctx.meta.ts.in.getTime();
 
@@ -41,7 +41,7 @@ export async function doneCtx(ctx: TCtx): Promise<void> {
   INSTANCE.INFLIGHT--;
 }
 
-function buildMeta(ctxRaw: TCtxBuild): TCtx["meta"] {
+function buildMeta(ctxRaw: TCtxBuild): TDefaultCtx["meta"] {
   const inTime = new Date();
   ++INSTANCE.SEQ;
   ++INSTANCE.INFLIGHT;
@@ -81,7 +81,7 @@ function buildMeta(ctxRaw: TCtxBuild): TCtx["meta"] {
   };
 }
 
-function buildReq(data: TCtxBuild): TCtx["req"] {
+function buildReq(data: TCtxBuild): TDefaultCtx["req"] {
   return {
     method: data.method,
     path: data.path,
@@ -92,12 +92,13 @@ function buildReq(data: TCtxBuild): TCtx["req"] {
   };
 }
 
-function buildUser(ctxRaw: TCtxBuild): TCtx["user"] {
+function buildUser(ctxRaw: TCtxBuild): TDefaultCtx["user"] {
   const header = ctxRaw.header;
   return {
     id: "none",
-    role: [USER_ROLE.none],
+    role: [],
     scope: [],
+    name: null,
     auth: {
       token: String(
         header["authorization"] || header["Authorization"] || "none"
@@ -107,7 +108,7 @@ function buildUser(ctxRaw: TCtxBuild): TCtx["user"] {
   };
 }
 
-function buildRes(): TCtx["res"] {
+function buildRes(): TDefaultCtx["res"] {
   return {
     code: "OK",
     msg: "OK",
@@ -115,7 +116,7 @@ function buildRes(): TCtx["res"] {
   };
 }
 
-function setResMeta(ctx: TCtx): void {
+function setResMeta(ctx: TDefaultCtx): void {
   const meta = ctx.meta;
   const clientSeq = parseInt(ctx.req.header["x-ctx-seq"] || "0");
   ctx.res.meta = {
