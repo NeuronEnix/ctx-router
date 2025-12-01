@@ -1,6 +1,6 @@
 {
   "name": "ctx-router",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Context Router",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -57,8 +57,5 @@
     "prettier": "^3.6.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
-  },
-  "dependencies": {
-    "tslib": "^2.8.1"
   }
 }
