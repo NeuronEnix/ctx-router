@@ -2,12 +2,19 @@ import { handleBeforeExec } from "../defaultHandler/handle.beforeExec";
 import { handleOnError } from "../defaultHandler/handle.onError";
 import { CtxError } from "./ctx.err";
 import { TDefaultCtx as TDefaultCtx } from "./ctx.types";
-import { RedisClientType } from "@redis/client";
+import { match as pathMatch, MatchFunction } from "path-to-regexp";
+
+type TRoute<TContext extends TDefaultCtx> = {
+  pattern: string;
+  matcher: MatchFunction<object>;
+  handler: (ctx: TContext) => Promise<TContext>;
+};
 
 type TRouteObj<TContext extends TDefaultCtx> = Record<
   string,
-  Record<string, (ctx: TContext) => Promise<TContext>>
+  TRoute<TContext>[]
 >;
+
 type THooks = {
   beforeExec<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
   onError<TContext extends TDefaultCtx>(
@@ -17,59 +24,16 @@ type THooks = {
   onFinally<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
 };
 
-type CtxRouterConfig = {
-  log?: { capture: boolean };
-  stream?: { redisClient: RedisClientType; key: string };
-};
-const ogLog = console.log;
 export class CtxRouter<TContext extends TDefaultCtx> {
   private routeObj: TRouteObj<TContext> = {};
   private hooks: THooks;
-  private consoleLogList: unknown[] = [];
-  private config: CtxRouterConfig;
-  constructor(config: CtxRouterConfig) {
-    this.config = config;
-    this.setConfig();
+
+  constructor() {
     this.hooks = {
       beforeExec: handleBeforeExec,
       onError: handleOnError,
       onFinally: async (ctx) => ctx,
     };
-  }
-
-  private setConfig() {
-    if (this.config.log?.capture) {
-      console.log = (...args: unknown[]) => {
-        try {
-          ogLog(...args);
-          const processedArgs = args.flatMap((arg) => {
-            if (arg instanceof Error) {
-              return [arg.stack, arg];
-            }
-            return arg;
-          });
-          this.consoleLogList.push(...processedArgs);
-        } catch (error) {
-          ogLog(error);
-          this.consoleLogList.push(error);
-        }
-      };
-    }
-  }
-  start() {
-    this.consoleLogList = [];
-  }
-  logGetRef() {
-    return this.consoleLogList;
-  }
-  logConsole(...args: unknown[]) {
-    ogLog(...args);
-  }
-
-  async flushToStream(ctx: TContext) {
-    if (!this.config.stream) return;
-    const { redisClient, key } = this.config.stream;
-    await redisClient.xAdd(key, "*", { ctx: JSON.stringify(ctx) });
   }
 
   beforeExecHook(handler: THooks["beforeExec"]) {
@@ -79,15 +43,34 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   async exec(ctx: TContext): Promise<TContext> {
     try {
       await this.hooks.beforeExec(ctx);
-      const handler = this.routeObj[ctx.req.method]?.[ctx.req.path];
-      if (!handler) {
+
+      // Find matching route
+      const routes = this.routeObj[ctx.req.method];
+      if (!routes) {
         throw new CtxError({
           name: "HANDLER_NOT_FOUND",
           msg: "Handler not found",
           data: { method: ctx.req.method, path: ctx.req.path },
         });
       }
-      return await handler(ctx);
+
+      // Find the first route that matches
+      const match = routes
+        .map((route) => ({ route, result: route.matcher(ctx.req.path) }))
+        .find((m) => m.result !== false);
+
+      if (!match || !match.result) {
+        throw new CtxError({
+          name: "HANDLER_NOT_FOUND",
+          msg: "Handler not found",
+          data: { method: ctx.req.method, path: ctx.req.path },
+        });
+      }
+
+      // Merge path params into ctx.req.data
+      ctx.req.data = { ...ctx.req.data, ...match.result.params };
+
+      return await match.route.handler(ctx);
     } catch (error) {
       return await this.hooks.onError(ctx, error);
     } finally {
@@ -100,8 +83,13 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     path: string,
     handler: (ctx: TContext) => Promise<TContext>
   ) {
-    const methodRoute = this.routeObj[method] || (this.routeObj[method] = {});
-    methodRoute[path] = handler;
+    const routes = this.routeObj[method] || (this.routeObj[method] = []);
+    const matcher = pathMatch(path, { decode: decodeURIComponent });
+    routes.push({
+      pattern: path,
+      matcher,
+      handler,
+    });
   }
 
   onErrorHook(handler: THooks["onError"]) {

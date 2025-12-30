@@ -12,8 +12,11 @@ export async function execute(reqData: TReqData): Promise<TResData> {
 export async function auth(ctx: TCtx): Promise<TCtx> {
   // authenticate the request, and return the context if the request is authenticated
   // await authRequest(ctx);
-  if (ctx.user.role.includes(USER_ROLE.USER)) return ctx;
-  if (ctx.user.role.includes(USER_ROLE.ADMIN)) return ctx;
+  const allowedRoles: Array<keyof typeof USER_ROLE> = [
+    USER_ROLE.USER,
+    USER_ROLE.ADMIN,
+  ];
+  if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
   throw ctxErr.auth.UNAUTHORIZED();
 }
 

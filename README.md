@@ -299,36 +299,6 @@ export const ctxErr = ctxErrMap({
 throw ctxErr.auth.UNAUTHORIZED();
 ```
 
-### Logging
-
-```typescript
-const router = new CtxRouter<TCtx>({
-  log: { capture: true },
-});
-
-// Logs are captured in ctx.meta.log.stdout
-router.logConsole("Processing request");
-```
-
-### Redis Streaming
-
-```typescript
-import { createClient } from "@redis/client";
-
-const redisClient = createClient();
-await redisClient.connect();
-
-const router = new CtxRouter<TCtx>({
-  stream: {
-    redisClient,
-    key: "CTX:OBJ",
-  },
-});
-
-// Context is automatically streamed to Redis
-await router.flushToStream(ctx);
-```
-
 ### Role-Based Authorization
 
 ```typescript
@@ -346,11 +316,9 @@ export type TCtx = TDefaultCtx & {
 
 // In your handler
 export async function auth(ctx: TCtx): Promise<TCtx> {
-  const allowedRoles = [USER_ROLE.ADMIN, USER_ROLE.USER];
-  if (!ctx.user.role.some((r) => allowedRoles.includes(r))) {
-    throw ctxErr.auth.UNAUTHORIZED();
-  }
-  return ctx;
+  const allowedRoles = [USER_ROLE.USER, USER_ROLE.ADMIN];
+  if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
+  throw ctxErr.auth.UNAUTHORIZED();
 }
 ```
 
@@ -383,20 +351,16 @@ Write tests against the unified context without mocking framework-specific objec
 #### Constructor
 
 ```typescript
-new CtxRouter<TCtx>(options?: {
-  log?: { capture: boolean };
-  stream?: { redisClient: RedisClient; key: string };
-})
+new CtxRouter<TCtx>()
 ```
 
 #### Methods
 
 - `handle(method: string, path: string, handler: IBaseApi<TCtx>)` - Register a route
 - `exec(ctx: TCtx): Promise<TCtx>` - Execute a route
-- `onError(handler: (ctx: TCtx, error: unknown) => Promise<TCtx>)` - Set error handler
-- `logConsole(message: string)` - Log a message
-- `logGetRef()` - Get captured logs
-- `flushToStream(ctx: TCtx)` - Stream context to Redis
+- `beforeExecHook(handler: (ctx: TCtx) => Promise<TCtx>)` - Set before execution hook
+- `onErrorHook(handler: (ctx: TCtx, error: unknown) => Promise<TCtx>)` - Set error handler
+- `onFinallyHook(handler: (ctx: TCtx) => Promise<TCtx>)` - Set finally hook
 
 ### Context Converters (toCtx)
 

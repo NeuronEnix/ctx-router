@@ -1,6 +1,6 @@
 import { CtxRouter, TDefaultCtx, ctxErrMap } from "..";
 import * as api from "./api/index";
-import { ctxRedisClient } from "./config/ctx.redis.config";
+
 export const USER_ROLE = {
   USER: "USER",
   ADMIN: "ADMIN",
@@ -23,13 +23,10 @@ export const ctxErr = ctxErrMap({
   },
 });
 // Set your router
-const router = new CtxRouter<TCtx>({
-  log: { capture: true },
-  stream: { redisClient: ctxRedisClient, key: "CTX:OBJ" },
-});
+const router = new CtxRouter<TCtx>();
 
 router.handle("GET", "/health/ping", api.health.ping);
 router.handle("POST", "/user/update", api.user.update);
-router.handle("GET", "/user/detail", api.user.detail);
+router.handle("GET", "/user/:userId", api.user.detail);
 
 export { router };
