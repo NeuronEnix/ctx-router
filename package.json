@@ -1,7 +1,7 @@
 {
   "name": "ctx-router",
   "version": "1.0.7",
-  "description": "Context Router",
+  "description": "Framework-agnostic router for building portable APIs. Write your business logic once, run it on Express, Lambda, SQS, gRPC, or any transport layer.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
@@ -30,9 +30,29 @@
     "url": "git+https://github.com/NeuronEnix/ctx-router.git"
   },
   "keywords": [
-    "ctx",
-    "router",
-    "context"
+    "ctx-router",
+    "context-router",
+    "framework-agnostic",
+    "transport-agnostic",
+    "portable-api",
+    "express",
+    "fastify",
+    "koa",
+    "lambda",
+    "aws-lambda",
+    "sqs",
+    "kinesis",
+    "grpc",
+    "serverless",
+    "microservices",
+    "clean-architecture",
+    "hexagonal-architecture",
+    "multi-transport",
+    "api-router",
+    "event-driven",
+    "cloud-agnostic",
+    "azure-functions",
+    "google-cloud-functions"
   ],
   "author": "Kaushik R Bangera",
   "license": "MIT",
