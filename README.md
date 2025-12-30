@@ -299,13 +299,34 @@ export const ctxErr = ctxErrMap({
 throw ctxErr.auth.UNAUTHORIZED();
 ```
 
+### Logging
+
+Configure logging level to control console output:
+
+```typescript
+// No logging
+const router = new CtxRouter<TCtx>({ logLevel: "none" });
+
+// Minimal: Method, Path, TraceId only
+const router = new CtxRouter<TCtx>({ logLevel: "minimal" });
+// Output: [GET /user/123] TraceId: abc-1
+
+// Standard (default): Essential info
+const router = new CtxRouter<TCtx>({ logLevel: "standard" });
+// Output: [GET /user/123] TraceId: abc-1 | UserId: user-456 | Seq: 1 | Inflight: 2
+
+// Verbose: All info including request data
+const router = new CtxRouter<TCtx>({ logLevel: "verbose" });
+// Output: [GET /user/123] IP: 127.0.0.1 | TraceId: abc-1 | SpanId: abc-1 | UserId: user-456 | UserSeq: 5 | Seq: 1 | Inflight: 2 | Data: {"userId":"123"}
+```
+
 ### Role-Based Authorization
 
 ```typescript
 export const USER_ROLE = {
-  USER: "USER",
-  ADMIN: "ADMIN",
-  SERVER: "SERVER",
+  user: "user",
+  admin: "admin",
+  server: "server",
 } as const;
 
 export type TCtx = TDefaultCtx & {
@@ -316,7 +337,7 @@ export type TCtx = TDefaultCtx & {
 
 // In your handler
 export async function auth(ctx: TCtx): Promise<TCtx> {
-  const allowedRoles = [USER_ROLE.USER, USER_ROLE.ADMIN];
+  const allowedRoles = [USER_ROLE.user, USER_ROLE.admin];
   if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
   throw ctxErr.auth.UNAUTHORIZED();
 }
@@ -351,16 +372,21 @@ Write tests against the unified context without mocking framework-specific objec
 #### Constructor
 
 ```typescript
-new CtxRouter<TCtx>()
+new CtxRouter<TCtx>(options?: {
+  logLevel?: "none" | "minimal" | "standard" | "verbose"
+})
 ```
+
+**Default:** `logLevel: "standard"`
 
 #### Methods
 
 - `handle(method: string, path: string, handler: IBaseApi<TCtx>)` - Register a route
 - `exec(ctx: TCtx): Promise<TCtx>` - Execute a route
-- `beforeExecHook(handler: (ctx: TCtx) => Promise<TCtx>)` - Set before execution hook
-- `onErrorHook(handler: (ctx: TCtx, error: unknown) => Promise<TCtx>)` - Set error handler
-- `onFinallyHook(handler: (ctx: TCtx) => Promise<TCtx>)` - Set finally hook
+- `hookBeforeExec(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called before route execution
+- `hookAfterExec(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called after successful execution
+- `hookExecError(handler: (ctx: TCtx, error: unknown) => Promise<TCtx>)` - Hook called on execution error
+- `hookExecFinally(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called after execution (success or error)
 
 ### Context Converters (toCtx)
 

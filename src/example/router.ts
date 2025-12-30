@@ -1,13 +1,8 @@
-import { CtxRouter, TDefaultCtx, ctxErrMap } from "..";
+import { CtxRouter, TDefaultCtx, ctxErrMap, USER_ROLE } from "..";
 import * as api from "./api/index";
 
-export const USER_ROLE = {
-  USER: "USER",
-  ADMIN: "ADMIN",
-  SERVER: "SERVER",
-  NONE: "NONE",
-} as const;
 export type TCtx = TDefaultCtx & { user: { role: (keyof typeof USER_ROLE)[] } };
+export { USER_ROLE };
 export const ctxErr = ctxErrMap({
   general: {
     UNKNOWN_ERROR: "Something went wrong",

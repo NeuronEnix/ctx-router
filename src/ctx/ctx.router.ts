@@ -1,8 +1,9 @@
-import { handleBeforeExec } from "../defaultHandler/handle.beforeExec";
+import { createBeforeExecHandler } from "../defaultHandler/handle.beforeExec";
 import { handleOnError } from "../defaultHandler/handle.onError";
 import { CtxError } from "./ctx.err";
 import { TDefaultCtx as TDefaultCtx } from "./ctx.types";
 import { match as pathMatch, MatchFunction } from "path-to-regexp";
+import { doneCtx } from "../transform";
 
 type TRoute<TContext extends TDefaultCtx> = {
   pattern: string;
@@ -17,27 +18,44 @@ type TRouteObj<TContext extends TDefaultCtx> = Record<
 
 type THooks = {
   beforeExec<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
-  onError<TContext extends TDefaultCtx>(
+  afterExec<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
+  execError<TContext extends TDefaultCtx>(
     ctx: TContext,
     error: CtxError | Error | unknown
   ): Promise<TContext>;
-  onFinally<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
+  execFinally<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
+};
+
+export type LogLevel = "none" | "minimal" | "standard" | "verbose";
+
+type CtxRouterConfig = {
+  logLevel?: LogLevel;
 };
 
 export class CtxRouter<TContext extends TDefaultCtx> {
   private routeObj: TRouteObj<TContext> = {};
   private hooks: THooks;
+  public logLevel: LogLevel;
 
-  constructor() {
+  constructor(config: CtxRouterConfig = {}) {
+    this.logLevel = config.logLevel ?? "standard";
     this.hooks = {
-      beforeExec: handleBeforeExec,
-      onError: handleOnError,
-      onFinally: async (ctx) => ctx,
+      beforeExec: createBeforeExecHandler(this.logLevel),
+      afterExec: async (ctx) => ctx,
+      execError: handleOnError,
+      execFinally: async (ctx) => {
+        await doneCtx(ctx);
+        return ctx;
+      },
     };
   }
 
-  beforeExecHook(handler: THooks["beforeExec"]) {
+  hookBeforeExec(handler: THooks["beforeExec"]) {
     this.hooks.beforeExec = handler;
+  }
+
+  hookAfterExec(handler: THooks["afterExec"]) {
+    this.hooks.afterExec = handler;
   }
 
   async exec(ctx: TContext): Promise<TContext> {
@@ -70,11 +88,13 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       // Merge path params into ctx.req.data
       ctx.req.data = { ...ctx.req.data, ...match.result.params };
 
-      return await match.route.handler(ctx);
+      const result = await match.route.handler(ctx);
+      await this.hooks.afterExec(result);
+      return result;
     } catch (error) {
-      return await this.hooks.onError(ctx, error);
+      return await this.hooks.execError(ctx, error);
     } finally {
-      await this.hooks.onFinally(ctx);
+      await this.hooks.execFinally(ctx);
     }
   }
 
@@ -92,10 +112,10 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     });
   }
 
-  onErrorHook(handler: THooks["onError"]) {
-    this.hooks.onError = handler;
+  hookExecError(handler: THooks["execError"]) {
+    this.hooks.execError = handler;
   }
-  onFinallyHook(handler: THooks["onFinally"]) {
-    this.hooks.onFinally = handler;
+  hookExecFinally(handler: THooks["execFinally"]) {
+    this.hooks.execFinally = handler;
   }
 }
