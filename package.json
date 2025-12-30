@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "ts-node src/example/express.ts",
+    "dev": "nodemon",
     "format": "prettier --write src",
     "format:staged": "lint-staged --config .lintstagedrc.json --allow-empty",
     "lint": "eslint --fix src",
@@ -63,7 +63,6 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@eslint/js": "^9.33.0",
-    "@redis/client": "^5.8.2",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
@@ -74,8 +73,12 @@
     "express": "^5.1.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.1.5",
+    "nodemon": "^3.1.11",
     "prettier": "^3.6.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "path-to-regexp": "^8.3.0"
   }
 }
