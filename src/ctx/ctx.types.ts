@@ -1,4 +1,4 @@
-export const USER_ROLE = {
+export const DEFAULT_USER_ROLE = {
   none: "none",
   user: "user",
   admin: "admin",
@@ -74,7 +74,7 @@ type CtxMeta = {
 
 type CtxUser = {
   id: string;
-  role: Array<keyof typeof USER_ROLE>;
+  role: Array<keyof typeof DEFAULT_USER_ROLE>;
   scope: string[];
   name: string | null;
   auth: { token: string; refresh: string };
