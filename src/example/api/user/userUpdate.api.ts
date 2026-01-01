@@ -1,4 +1,4 @@
-import { TCtx, USER_ROLE, ctxErr } from "../../router";
+import { TCtx, DEFAULT_USER_ROLE, ctxErr } from "../../router";
 
 export async function execute(reqData: TReqData): Promise<TResData> {
   return {
@@ -10,9 +10,9 @@ export async function execute(reqData: TReqData): Promise<TResData> {
 export async function auth(ctx: TCtx): Promise<TCtx> {
   // authenticate the request, and return the context if the request is authenticated
   // await authRequest(ctx);
-  const allowedRoles: Array<keyof typeof USER_ROLE> = [
-    USER_ROLE.user,
-    USER_ROLE.admin,
+  const allowedRoles: Array<keyof typeof DEFAULT_USER_ROLE> = [
+    DEFAULT_USER_ROLE.user,
+    DEFAULT_USER_ROLE.admin,
   ];
   if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
   throw ctxErr.auth.UNAUTHORIZED();
