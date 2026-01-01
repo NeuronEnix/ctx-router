@@ -5,11 +5,11 @@ const INSTANCE = {
   ID: instanceId,
   TRACE_ID: instanceId,
   CREATED_AT: new Date(),
-  SERVICE_NAME: process.env.SERVICE_NAME || "my-service",
+  SERVICE_NAME: process.env["SERVICE_NAME"] || "my-service",
   SEQ: 0,
   INFLIGHT: 0,
   LAST_HEARTBEAT: new Date(),
-  PORT: parseInt(process.env.SERVICE_PORT || "3000", 10),
+  PORT: parseInt(process.env["SERVICE_PORT"] || "3000", 10),
 };
 
 type TCtxBuild = {
