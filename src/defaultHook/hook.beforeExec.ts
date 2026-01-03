@@ -1,7 +1,7 @@
 import { TDefaultCtx } from "../core";
 import { LogLevel } from "../router";
 
-export function createBeforeExecHandler<TContext extends TDefaultCtx>(
+export function defaultHookBeforeExec<TContext extends TDefaultCtx>(
   logLevel: LogLevel
 ) {
   return async (ctx: TContext): Promise<TContext> => {

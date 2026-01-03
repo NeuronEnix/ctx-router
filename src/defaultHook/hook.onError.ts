@@ -1,7 +1,7 @@
 import { CtxError } from "../error";
 import { TDefaultCtx } from "../core";
 
-export async function handleOnError<TContext extends TDefaultCtx>(
+export async function defaultHookExecError<TContext extends TDefaultCtx>(
   ctx: TContext,
   e: CtxError | Error | unknown
 ): Promise<TContext> {

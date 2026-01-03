@@ -1,5 +1,5 @@
-import { createBeforeExecHandler } from "./defaultHandler/handle.beforeExec";
-import { handleOnError } from "./defaultHandler/handle.onError";
+import { defaultHookBeforeExec } from "./defaultHook/hook.beforeExec";
+import { defaultHookExecError } from "./defaultHook/hook.onError";
 import { CtxError } from "./error";
 import { TDefaultCtx } from "./core";
 import { match as pathMatch, MatchFunction } from "path-to-regexp";
@@ -40,9 +40,9 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   constructor(config: CtxRouterConfig = {}) {
     this.logLevel = config.logLevel ?? "standard";
     this.hooks = {
-      beforeExec: createBeforeExecHandler(this.logLevel),
+      beforeExec: defaultHookBeforeExec(this.logLevel),
       afterExec: async (ctx) => ctx,
-      execError: handleOnError,
+      execError: defaultHookExecError,
       execFinally: async (ctx) => {
         await doneCtx(ctx);
         return ctx;
