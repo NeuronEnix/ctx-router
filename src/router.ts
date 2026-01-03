@@ -1,9 +1,9 @@
-import { createBeforeExecHandler } from "../defaultHandler/handle.beforeExec";
-import { handleOnError } from "../defaultHandler/handle.onError";
-import { CtxError } from "./ctx.err";
-import { TDefaultCtx as TDefaultCtx } from "./ctx.types";
+import { createBeforeExecHandler } from "./defaultHandler/handle.beforeExec";
+import { handleOnError } from "./defaultHandler/handle.onError";
+import { CtxError } from "./error";
+import { TDefaultCtx } from "./core";
 import { match as pathMatch, MatchFunction } from "path-to-regexp";
-import { doneCtx } from "../transform";
+import { doneCtx } from "./transform";
 
 type TRoute<TContext extends TDefaultCtx> = {
   pattern: string;
@@ -62,28 +62,42 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     try {
       await this.hooks.beforeExec(ctx);
 
+      // Extract method and path from routePattern (e.g., "GET /user/123")
+      const spaceIndex = ctx.req.routePattern.indexOf(" ");
+      const method =
+        spaceIndex > 0 ? ctx.req.routePattern.substring(0, spaceIndex) : "GET";
+      const path =
+        spaceIndex > 0
+          ? ctx.req.routePattern.substring(spaceIndex + 1)
+          : ctx.req.routePattern;
+
       // Find matching route
-      const routes = this.routeObj[ctx.req.method];
+      const routes = this.routeObj[method];
       if (!routes) {
         throw new CtxError({
           name: "HANDLER_NOT_FOUND",
           msg: "Handler not found",
-          data: { method: ctx.req.method, path: ctx.req.path },
+          data: { routePattern: ctx.req.routePattern },
         });
       }
 
       // Find the first route that matches
       const match = routes
-        .map((route) => ({ route, result: route.matcher(ctx.req.path) }))
+        .map((route) => ({ route, result: route.matcher(path) }))
         .find((m) => m.result !== false);
 
       if (!match || !match.result) {
         throw new CtxError({
           name: "HANDLER_NOT_FOUND",
           msg: "Handler not found",
-          data: { method: ctx.req.method, path: ctx.req.path },
+          data: { routePattern: ctx.req.routePattern },
         });
       }
+
+      // Update routePattern to matched pattern (e.g., "GET /user/:userId")
+      ctx.req.routePattern = `${method} ${match.route.pattern}`;
+
+      // route stays as-is (actual path with values, e.g., "GET /user/123")
 
       // Merge path params into ctx.req.data
       ctx.req.data = { ...ctx.req.data, ...match.result.params };

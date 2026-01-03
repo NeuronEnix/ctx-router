@@ -1,5 +1,5 @@
-import { CtxError } from "../ctx/ctx.err";
-import { TDefaultCtx } from "../ctx/ctx.types";
+import { CtxError } from "../error";
+import { TDefaultCtx } from "../core";
 
 export async function handleOnError<TContext extends TDefaultCtx>(
   ctx: TContext,
@@ -10,16 +10,20 @@ export async function handleOnError<TContext extends TDefaultCtx>(
     console.log("CtxError:message:", e.message);
     console.log("CtxError:data:", e.data);
     if (e.info) {
-      ctx.res.info = e.info;
-    }
-    if (typeof e.info === "object") {
-      console.log("CtxError:info:object:", JSON.stringify(e.info));
-    } else {
-      console.log("CtxError:info:", e.info);
+      if (typeof e.info === "object") {
+        console.log("CtxError:info:object:", JSON.stringify(e.info));
+      } else {
+        console.log("CtxError:info:", e.info);
+      }
     }
     if (e.stack) {
       console.log("CtxError:stack:", e.stack);
     }
+
+    // Store error in ctx.err for internal tracking
+    ctx.err = e;
+
+    // Set response (client-safe data only)
     ctx.res = { code: e.name, msg: e.message, data: e.data };
     return ctx;
   }
@@ -30,6 +34,10 @@ export async function handleOnError<TContext extends TDefaultCtx>(
     name: "UNKNOWN_ERROR",
     msg: "Something went wrong",
   });
+
+  // Store error in ctx.err
+  ctx.err = error;
+
   ctx.res = {
     code: error.name,
     msg: error.message,
