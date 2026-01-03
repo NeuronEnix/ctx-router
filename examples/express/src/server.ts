@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import { toCtx } from "..";
+import { toCtx } from "ctx-router";
 import { router, TCtx } from "./router";
 
 const app = express();

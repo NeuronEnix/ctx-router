@@ -1,6 +1,0 @@
-{
-  "ignore": ["**/*.test.ts", "**/*.spec.ts", ".git", "node_modules"],
-  "watch": ["src", "tsconfig.json", ".env"],
-  "ext": "ts",
-  "exec": "ts-node src/example/express.ts"
-}

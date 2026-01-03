@@ -1,0 +1,23 @@
+{
+  "name": "ctx-router-example-express",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express example for ctx-router",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "ctx-router": "workspace:*",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.10.4",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

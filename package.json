@@ -16,7 +16,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "dev": "nodemon",
+    "dev": "pnpm --filter ctx-router-example-express dev",
     "format": "prettier --write src",
     "format:staged": "lint-staged --config .lintstagedrc.json --allow-empty",
     "lint": "eslint --fix src",

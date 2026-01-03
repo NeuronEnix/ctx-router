@@ -1,7 +1,8 @@
 {
-  "*.{js,ts,tsx}": [
+  "src/**/*.{js,ts,tsx}": [
     "prettier --write --cache",
     "eslint --fix --max-warnings=0 --cache"
   ],
+  "src/**/*.{json,md,yaml,yml}": ["prettier --write --cache"],
   "*.{json,md,yaml,yml}": ["prettier --write --cache"]
 }

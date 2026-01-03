@@ -1,4 +1,4 @@
-import { CtxRouter, TDefaultCtx, ctxErrMap, DEFAULT_USER_ROLE } from "..";
+import { CtxRouter, TDefaultCtx, ctxErrMap, DEFAULT_USER_ROLE } from "ctx-router";
 import * as api from "./api/index";
 
 export type TCtx = TDefaultCtx & {
