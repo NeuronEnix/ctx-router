@@ -3,7 +3,7 @@ import { defaultHookExecError } from "./defaultHook/hook.onError";
 import { CtxError } from "./error";
 import { TDefaultCtx } from "./core";
 import { match as pathMatch, MatchFunction } from "path-to-regexp";
-import { doneCtx } from "./transform";
+import { doneCtx } from "./adapter";
 
 type TRoute<TContext extends TDefaultCtx> = {
   pattern: string;
