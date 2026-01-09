@@ -1,6 +1,5 @@
 import { Request } from "express";
-import { TDefaultCtx, CtxUser } from "../core";
-import { INSTANCE, getNextSeq, incrementInflight } from ".";
+import { TDefaultCtx } from "../core";
 
 function getPath(url: string): string {
   const queryParamPos = url.indexOf("?");
@@ -28,19 +27,33 @@ function getHeader(
   return Array.isArray(value) ? value[0] : value;
 }
 
-export function transformFromExpress(req: Request): TDefaultCtx {
-  const inTime = Date.now();
-  const seq = getNextSeq();
-  incrementInflight();
-
+/**
+ * Enriches an existing context with Express request data.
+ * Modifies ctx in-place.
+ *
+ * @param ctx - Context created by router.getNewCtx()
+ * @param req - Express request object
+ */
+export function enrichFromExpress(ctx: TDefaultCtx, req: Request): void {
   const method = req.method;
   const path = getPath(req.url);
   const route = `${method} ${path}`;
 
   // Extract clientIn from header and validate
   const clientInStr = getHeader(req.headers, "x-ctx-ts");
-  const clientIn = clientInStr ? new Date(clientInStr).getTime() : inTime;
-  const validClientIn = isNaN(clientIn) ? inTime : clientIn;
+  const clientIn = clientInStr
+    ? new Date(clientInStr).getTime()
+    : ctx.meta.ts.in;
+  const validClientIn = isNaN(clientIn) ? ctx.meta.ts.in : clientIn;
+
+  // Update client timestamp and owd (replace entire ts object to handle readonly properties)
+  ctx.meta.ts = {
+    in: ctx.meta.ts.in,
+    clientIn: validClientIn,
+    out: 0,
+    execTime: 0,
+    owd: ctx.meta.ts.in - validClientIn,
+  };
 
   // Build auth (only include fields that exist)
   const bearerToken = extractBearerToken(req.headers.authorization);
@@ -84,87 +97,28 @@ export function transformFromExpress(req: Request): TDefaultCtx {
   if (userAgent) transportMeta["user-agent"] = userAgent;
   if (contentType) transportMeta["content-type"] = contentType;
 
-  // Build CtxReq
-  const ctxReq: TDefaultCtx["req"] = {
-    data: { ...req.body, ...req.query, ...req.params },
-    route,
-    routePattern: route, // Router will reassign after matching
+  // Enrich ctx.req
+  ctx.req.data = { ...req.body, ...req.query, ...req.params };
+  ctx.req.route = route;
+  ctx.req.routePattern = route; // Router will reassign after matching
 
-    ...(Object.keys(auth).length > 0 && { auth }),
-    ...(Object.keys(client).length > 0 && { client }),
-    ...(Object.keys(invocation).length > 0 && { invocation }),
+  if (Object.keys(auth).length > 0) ctx.req.auth = auth;
+  if (Object.keys(client).length > 0) ctx.req.client = client;
+  if (Object.keys(invocation).length > 0) ctx.req.invocation = invocation;
 
-    transport: {
-      protocol: "http",
-      request: {
-        method,
-        path,
+  ctx.req.transport = {
+    protocol: "http",
+    request: {
+      method,
+      path,
+    },
+    ...(req.ip && {
+      network: {
+        originIp: req.ip,
+        hops: req.ips,
       },
-      ...(req.ip && {
-        network: {
-          originIp: req.ip,
-          hops: req.ips,
-        },
-      }),
-      ...(Object.keys(transportMeta).length > 0 && { meta: transportMeta }),
-      raw: req,
-    },
-  };
-
-  // Build default user (anonymous)
-  const user: CtxUser = {
-    kind: "user",
-    id: "none",
-    role: ["none"],
-    scope: [],
-    handle: null,
-  };
-
-  // Build CtxMeta
-  const traceId = `${INSTANCE.ID}-${seq}`;
-  const spanId = `${INSTANCE.ID}-${seq}`;
-
-  const meta: TDefaultCtx["meta"] = {
-    serviceName: INSTANCE.SERVICE_NAME,
-    instance: {
-      id: INSTANCE.ID,
-      createdAt: INSTANCE.CREATED_AT,
-      seq,
-      inflight: INSTANCE.INFLIGHT,
-      cpu: 0,
-      mem: 0,
-    },
-    ts: {
-      in: inTime,
-      clientIn: validClientIn,
-      out: 0,
-      execTime: 0,
-      owd: inTime - validClientIn,
-    },
-    monitor: {
-      traceId,
-      spanId,
-    },
-    log: {
-      stdout: [],
-      db: [],
-    },
-  };
-
-  // Build CtxRes
-  const res: TDefaultCtx["res"] = {
-    code: "OK",
-    msg: "OK",
-    data: {},
-  };
-
-  // Build TDefaultCtx
-  return {
-    id: traceId,
-    req: ctxReq,
-    res,
-    err: null,
-    user,
-    meta,
+    }),
+    ...(Object.keys(transportMeta).length > 0 && { meta: transportMeta }),
+    raw: req,
   };
 }

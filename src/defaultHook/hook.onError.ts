@@ -29,7 +29,7 @@ export async function defaultHookExecError<TContext extends TDefaultCtx>(
   }
 
   // ideally should never come here, god forbid it did
-  console.log("CtxError:unknown:fatal", e);
+  console.log("CtxError:UKNOWN_ERROR:FATAL", e);
   const error = new CtxError({
     name: "UNKNOWN_ERROR",
     msg: "Something went wrong",
