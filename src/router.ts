@@ -11,11 +11,6 @@ type TRoute<TContext extends TDefaultCtx> = {
   handler: (ctx: TContext) => Promise<TContext>;
 };
 
-type TRouteObj<TContext extends TDefaultCtx> = Record<
-  string,
-  TRoute<TContext>[]
->;
-
 type THooks = {
   beforeExec<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
   afterExec<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
@@ -34,7 +29,7 @@ type CtxRouterConfig = {
 };
 
 export class CtxRouter<TContext extends TDefaultCtx> {
-  private routeObj: TRouteObj<TContext> = {};
+  private routes: TRoute<TContext>[] = [];
   private hooks: THooks;
   public logLevel: LogLevel;
 
@@ -197,28 +192,12 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
       await this.hooks.beforeExec(ctx);
 
-      // Extract method and path from routePattern (e.g., "GET /user/123")
-      const spaceIndex = ctx.req.routePattern.indexOf(" ");
-      const method =
-        spaceIndex > 0 ? ctx.req.routePattern.substring(0, spaceIndex) : "GET";
-      const path =
-        spaceIndex > 0
-          ? ctx.req.routePattern.substring(spaceIndex + 1)
-          : ctx.req.routePattern;
-
-      // Find matching route
-      const routes = this.routeObj[method];
-      if (!routes) {
-        throw new CtxError({
-          name: "HANDLER_NOT_FOUND",
-          msg: "Handler not found",
-          data: { routePattern: ctx.req.routePattern },
-        });
-      }
-
-      // Find the first route that matches
-      const match = routes
-        .map((route) => ({ route, result: route.matcher(path) }))
+      // Find matching route (protocol-agnostic)
+      const match = this.routes
+        .map((route) => ({
+          route,
+          result: route.matcher(ctx.req.routePattern),
+        }))
         .find((m) => m.result !== false);
 
       if (!match || !match.result) {
@@ -230,11 +209,9 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       }
 
       // Update routePattern to matched pattern (e.g., "GET /user/:userId")
-      ctx.req.routePattern = `${method} ${match.route.pattern}`;
+      ctx.req.routePattern = match.route.pattern;
 
-      // route stays as-is (actual path with values, e.g., "GET /user/123")
-
-      // Merge path params into ctx.req.data
+      // Merge route params into ctx.req.data
       ctx.req.data = { ...ctx.req.data, ...match.result.params };
 
       const result = await match.route.handler(ctx);
@@ -247,15 +224,10 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     }
   }
 
-  handle(
-    method: string,
-    path: string,
-    handler: (ctx: TContext) => Promise<TContext>
-  ) {
-    const routes = this.routeObj[method] || (this.routeObj[method] = []);
-    const matcher = pathMatch(path, { decode: decodeURIComponent });
-    routes.push({
-      pattern: path,
+  handle(route: string, handler: (ctx: TContext) => Promise<TContext>) {
+    const matcher = pathMatch(route, { decode: decodeURIComponent });
+    this.routes.push({
+      pattern: route,
       matcher,
       handler,
     });
