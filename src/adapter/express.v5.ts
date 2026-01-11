@@ -99,8 +99,8 @@ export function enrichFromExpress(ctx: TDefaultCtx, req: Request): void {
 
   // Enrich ctx.req
   ctx.req.data = { ...req.body, ...req.query, ...req.params };
-  ctx.req.route = route;
-  ctx.req.routePattern = route; // Router will reassign after matching
+  ctx.req.routeValue = route;
+  ctx.req.route = route; // Router will reassign to pattern after matching
 
   if (Object.keys(auth).length > 0) ctx.req.auth = auth;
   if (Object.keys(client).length > 0) ctx.req.client = client;

@@ -125,8 +125,8 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       id: traceId,
       req: {
         data: {},
-        route: "PENDING", // Adapter will set
-        routePattern: "PENDING", // Router will set in exec
+        route: "PENDING", // Router will set in exec
+        routeValue: "PENDING", // Adapter will set
         transport: {
           protocol: "unknown",
           raw: null,
@@ -181,7 +181,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       const match = this.routes
         .map((route) => ({
           route,
-          result: route.matcher(ctx.req.routePattern),
+          result: route.matcher(ctx.req.routeValue),
         }))
         .find((m) => m.result !== false);
 
@@ -189,12 +189,12 @@ export class CtxRouter<TContext extends TDefaultCtx> {
         throw new CtxError({
           name: "HANDLER_NOT_FOUND",
           msg: "Handler not found",
-          data: { routePattern: ctx.req.routePattern },
+          data: { routeValue: ctx.req.routeValue },
         });
       }
 
-      // Update routePattern to matched pattern (e.g., "GET /user/:userId")
-      ctx.req.routePattern = match.route.pattern;
+      // Update route to matched pattern (e.g., "GET /user/:userId")
+      ctx.req.route = match.route.pattern;
 
       // Merge route params into ctx.req.data
       ctx.req.data = { ...ctx.req.data, ...match.result.params };

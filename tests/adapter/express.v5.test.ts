@@ -28,7 +28,7 @@ describe("enrichFromExpress", () => {
   });
 
   describe("route extraction", () => {
-    it("sets route from method and path", () => {
+    it("sets route and routeValue from method and path", () => {
       const req = createMockRequest({
         method: "POST",
         url: "/api/users",
@@ -36,8 +36,8 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req);
 
+      expect(ctx.req.routeValue).toBe("POST /api/users");
       expect(ctx.req.route).toBe("POST /api/users");
-      expect(ctx.req.routePattern).toBe("POST /api/users");
     });
 
     it("strips query params from path", () => {
@@ -48,7 +48,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req);
 
-      expect(ctx.req.route).toBe("GET /search");
+      expect(ctx.req.routeValue).toBe("GET /search");
     });
   });
 

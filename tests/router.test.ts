@@ -134,8 +134,8 @@ describe("CtxRouter", () => {
       });
 
       const ctx = router.begin();
+      ctx.req.routeValue = "GET /test";
       ctx.req.route = "GET /test";
-      ctx.req.routePattern = "GET /test";
 
       await router.exec(ctx);
 
@@ -149,8 +149,8 @@ describe("CtxRouter", () => {
       });
 
       const ctx = router.begin();
+      ctx.req.routeValue = "GET /user/123";
       ctx.req.route = "GET /user/123";
-      ctx.req.routePattern = "GET /user/123";
 
       await router.exec(ctx);
 
@@ -162,8 +162,8 @@ describe("CtxRouter", () => {
   describe("exec()", () => {
     it("throws HANDLER_NOT_FOUND for unregistered route", async () => {
       const ctx = router.begin();
+      ctx.req.routeValue = "GET /unknown";
       ctx.req.route = "GET /unknown";
-      ctx.req.routePattern = "GET /unknown";
 
       await router.exec(ctx);
 
@@ -177,8 +177,8 @@ describe("CtxRouter", () => {
       });
 
       const ctx = router.begin();
+      ctx.req.routeValue = "POST /data";
       ctx.req.route = "POST /data";
-      ctx.req.routePattern = "POST /data";
 
       await router.exec(ctx);
 
@@ -186,16 +186,16 @@ describe("CtxRouter", () => {
       expect(ctx.res.data).toEqual({ received: true });
     });
 
-    it("updates routePattern after matching", async () => {
+    it("updates route to pattern after matching", async () => {
       router.handle("GET /item/:id", async (ctx) => ctx);
 
       const ctx = router.begin();
+      ctx.req.routeValue = "GET /item/456";
       ctx.req.route = "GET /item/456";
-      ctx.req.routePattern = "GET /item/456";
 
       await router.exec(ctx);
 
-      expect(ctx.req.routePattern).toBe("GET /item/:id");
+      expect(ctx.req.route).toBe("GET /item/:id");
     });
   });
 
@@ -211,8 +211,8 @@ describe("CtxRouter", () => {
       router.handle("GET /test", async (ctx) => ctx);
 
       const ctx = router.begin();
+      ctx.req.routeValue = "GET /test";
       ctx.req.route = "GET /test";
-      ctx.req.routePattern = "GET /test";
 
       await router.exec(ctx);
 

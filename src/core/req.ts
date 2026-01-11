@@ -7,27 +7,27 @@ export type CtxReq<Data = Record<string, unknown>> = {
   data: Data;
 
   /**
-   * Concrete route for this invocation (may be high-cardinality).
-   * Examples:
-   * - "GET /users/123"
-   * - "sqs:order.created"
-   *
-   * Transformer initially sets this to the raw path.
-   * Router reassigns after pattern matching.
-   */
-  route: string;
-
-  /**
    * Canonical route pattern (low-cardinality, first-class).
    * Examples:
    * - "GET /users/:id"
    * - "sqs:order.created"
    * - "internal cleanup.run"
    *
-   * Transformer initially sets this to same as route.
+   * Adapter initially sets this to the raw path.
    * Router reassigns after finding matching pattern.
    */
-  routePattern: string;
+  route: string;
+
+  /**
+   * Concrete route for this invocation (may be high-cardinality).
+   * Examples:
+   * - "GET /users/123"
+   * - "sqs:order.created"
+   *
+   * Adapter sets this to the raw path.
+   * Remains unchanged after routing.
+   */
+  routeValue: string;
 
   /**
    * Raw authorization payload from the ingress.

@@ -12,7 +12,7 @@ app.use(express.urlencoded({ extended: true }));
 router.hookAlterContext(async (ctx) => {
   // Demonstrate hook functionality by logging
   console.log(
-    `[alterContext] Processing request ${ctx.id} - ${ctx.req.route}`
+    `[alterContext] Processing request ${ctx.id} - ${ctx.req.routeValue}`
   );
   return ctx;
 });
@@ -32,7 +32,7 @@ app.use(async (req: Request, res: Response) => {
 
   // 2. Enrich context with Express request data
   adapter.enrichFromExpress(ctx, req);
-  console.log(`[2. Enriched] Route: ${ctx.req.route}`);
+  console.log(`[2. Enriched] RouteValue: ${ctx.req.routeValue}`);
 
   // 3. Execute route handler (with hooks)
   await router.exec(ctx);
