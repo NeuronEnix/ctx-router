@@ -1,4 +1,4 @@
-import { Request } from "express";
+import { Request, Response } from "express";
 import { TDefaultCtx } from "../core";
 
 function getPath(url: string): string {
@@ -34,7 +34,7 @@ function getHeader(
  * @param ctx - Context created by router.getNewCtx()
  * @param req - Express request object
  */
-export function enrichFromExpress(ctx: TDefaultCtx, req: Request): void {
+export function enrichFromExpress(ctx: TDefaultCtx, req: Request, res: Response): void {
   const method = req.method;
   const path = getPath(req.url);
   const route = `${method} ${path}`;
@@ -119,6 +119,9 @@ export function enrichFromExpress(ctx: TDefaultCtx, req: Request): void {
       },
     }),
     ...(Object.keys(transportMeta).length > 0 && { meta: transportMeta }),
-    raw: req,
+    raw: {
+      req,
+      res
+    },
   };
 }

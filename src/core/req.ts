@@ -60,8 +60,10 @@ export type CtxReq<Data = Record<string, unknown>> = {
    */
   invocation?: {
     traceId?: string;
+    spanId?: string;
     seq?: number;
     ts?: number; // epoch ms
+    traceparent?: string;
   };
 
   /**
@@ -73,7 +75,7 @@ export type CtxReq<Data = Record<string, unknown>> = {
      * Transport protocol identifier.
      * Examples: "http", "grpc", "graphql", "lambda", "sqs", "kafka", "internal"
      */
-    protocol: string;
+    protocol: "http" | "grpc" | "graphql" | "lambda" | "sqs" | "kafka" | "internal" | string;
 
     /**
      * Protocol-level addressing or operation info.
@@ -104,6 +106,6 @@ export type CtxReq<Data = Record<string, unknown>> = {
      * - Lambda: event/context
      * - gRPC: call/metadata
      */
-    raw?: unknown;
+    raw: { [key: string]: unknown } | null;
   };
 };

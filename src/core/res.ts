@@ -1,12 +1,12 @@
 type CtxResMeta = {
-  ctxId: string;
-  seq: number;
-  traceId: string;
-  spanId: string;
-  inTime: number;
-  outTime: number;
-  execTime: number;
-  owd: number;
+  ctxId?: string;
+  seq?: number;
+  traceId?: string;
+  spanId?: string;
+  inTime?: number;
+  outTime?: number;
+  execTime?: number;
+  owd?: number;
 };
 
 export type CtxRes = {

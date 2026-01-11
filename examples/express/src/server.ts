@@ -31,7 +31,7 @@ app.use(async (req: Request, res: Response) => {
   );
 
   // 2. Enrich context with Express request data
-  adapter.enrichFromExpress(ctx, req);
+  adapter.enrichFromExpress(ctx, req, res);
   console.log(`[2. Enriched] RouteValue: ${ctx.req.routeValue}`);
 
   // 3. Execute route handler (with hooks)

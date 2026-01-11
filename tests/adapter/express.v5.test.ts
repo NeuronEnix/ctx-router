@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { Request } from "express";
+import { Request, Response } from "express";
 import { enrichFromExpress } from "../../src/adapter/express.v5";
 import { CtxRouter } from "../../src/router";
 import { TDefaultCtx } from "../../src/core";
@@ -18,13 +18,19 @@ function createMockRequest(overrides: Partial<Request> = {}): Request {
   } as Request;
 }
 
+function createMockResponse(): Response {
+  return {} as Response;
+}
+
 describe("enrichFromExpress", () => {
   let router: CtxRouter<TDefaultCtx>;
   let ctx: TDefaultCtx;
+  let res: Response;
 
   beforeEach(() => {
     router = new CtxRouter<TDefaultCtx>({ logLevel: "none" });
     ctx = router.begin();
+    res = createMockResponse();
   });
 
   describe("route extraction", () => {
@@ -34,7 +40,7 @@ describe("enrichFromExpress", () => {
         url: "/api/users",
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.routeValue).toBe("POST /api/users");
       expect(ctx.req.route).toBe("POST /api/users");
@@ -46,7 +52,7 @@ describe("enrichFromExpress", () => {
         url: "/search?q=test&page=1",
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.routeValue).toBe("GET /search");
     });
@@ -60,7 +66,7 @@ describe("enrichFromExpress", () => {
         params: { id: "123" },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.data).toEqual({
         name: "John",
@@ -76,7 +82,7 @@ describe("enrichFromExpress", () => {
         params: { field: "params" },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.data.field).toBe("params");
     });
@@ -90,7 +96,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.auth?.bearerToken).toBe("abc123token");
     });
@@ -102,7 +108,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.auth?.apiKey).toBe("api-key-123");
     });
@@ -114,7 +120,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.auth?.refreshToken).toBe("refresh-token-456");
     });
@@ -122,7 +128,7 @@ describe("enrichFromExpress", () => {
     it("does not set auth when no auth headers present", () => {
       const req = createMockRequest();
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.auth).toBeUndefined();
     });
@@ -132,7 +138,7 @@ describe("enrichFromExpress", () => {
     it("sets protocol to http", () => {
       const req = createMockRequest();
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.transport.protocol).toBe("http");
     });
@@ -143,7 +149,7 @@ describe("enrichFromExpress", () => {
         url: "/api/item/123",
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.transport.request?.method).toBe("PUT");
       expect(ctx.req.transport.request?.path).toBe("/api/item/123");
@@ -155,7 +161,7 @@ describe("enrichFromExpress", () => {
         ips: ["10.0.0.1", "192.168.1.1"],
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.transport.network?.originIp).toBe("192.168.1.1");
       expect(ctx.req.transport.network?.hops).toEqual([
@@ -172,18 +178,18 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.transport.meta?.["user-agent"]).toBe("Mozilla/5.0");
       expect(ctx.req.transport.meta?.["content-type"]).toBe("application/json");
     });
 
-    it("stores raw request reference", () => {
+    it("stores raw request and response references", () => {
       const req = createMockRequest();
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.transport.raw).toBe(req);
+      expect(ctx.req.transport.raw).toEqual({ req, res });
     });
   });
 
@@ -197,7 +203,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.client?.deviceName).toBe("iPhone 15");
       expect(ctx.req.client?.deviceId).toBe("device-abc");
@@ -212,7 +218,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.client?.appVersion).toBe("2.0.0");
       expect(ctx.req.client?.apiVersion).toBe("v2");
@@ -228,7 +234,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.meta.ts.clientIn).toBe(
         new Date("2024-01-01T12:00:00Z").getTime()
@@ -239,7 +245,7 @@ describe("enrichFromExpress", () => {
       const serverIn = ctx.meta.ts.in;
       const req = createMockRequest();
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.meta.ts.clientIn).toBe(serverIn);
     });
@@ -252,7 +258,7 @@ describe("enrichFromExpress", () => {
         },
       });
 
-      enrichFromExpress(ctx, req);
+      enrichFromExpress(ctx, req, res);
 
       expect(ctx.meta.ts.owd).toBeGreaterThan(0);
     });
