@@ -38,7 +38,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     ID: crypto.randomBytes(5).toString("hex"),
     TRACE_ID: crypto.randomBytes(5).toString("hex"),
     CREATED_AT: Date.now(),
-    SERVICE_NAME: process.env["SERVICE_NAME"] || "my-service",
+    SERVICE_NAME: process.env["SERVICE_NAME"] || "ctx-service",
     SEQ: 0,
     INFLIGHT: 0,
     LAST_HEARTBEAT: Date.now(),
@@ -70,30 +70,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       afterExec: async (ctx) => ctx,
       alterContext: async (ctx) => ctx,
       execError: defaultHookExecError,
-      execFinally: async (ctx) => {
-        // Inline doneCtx logic
-        ctx.meta.ts.out = Date.now();
-        ctx.meta.ts.execTime = ctx.meta.ts.out - ctx.meta.ts.in;
-
-        // Set response meta
-        const meta = ctx.meta;
-        const clientSeq = ctx.req.invocation?.seq || 0;
-        ctx.res.meta = {
-          ctxId: ctx.id,
-          seq: Number.isInteger(clientSeq) ? clientSeq : 0,
-          traceId: meta.monitor.traceId,
-          spanId: meta.monitor.spanId,
-          inTime: meta.ts.in,
-          outTime: meta.ts.out,
-          execTime: meta.ts.execTime,
-          owd: meta.ts.owd,
-        };
-
-        // Decrement inflight
-        this.decrementInflight();
-
-        return ctx;
-      },
+      execFinally: async (ctx) => ctx,
     };
   }
 
@@ -110,15 +87,23 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   }
 
   /**
-   * Creates a new context with default values and router INSTANCE data.
-   * Increments INFLIGHT counter.
+   * Begins a new request lifecycle by creating context with default values.
+   * Increments INFLIGHT counter and SEQ for this router instance.
+   *
+   * This is the first step in the three-phase request lifecycle:
+   * 1. begin() - Create context, increment metrics
+   * 2. exec() - Execute route handler
+   * 3. end() - Finalize context, decrement metrics
    *
    * Usage:
-   *   const ctx = router.getNewCtx();
-   *   enrichFromExpress(ctx, req);
+   *   const ctx = router.begin();
+   *   adapter.enrichFromExpress(ctx, req);
    *   await router.exec(ctx);
+   *   router.end(ctx);
+   *
+   * @returns A new context with default values and router INSTANCE data
    */
-  public getNewCtx(): TContext {
+  public begin(): TContext {
     const inTime = Date.now();
     const seq = this.getNextSeq();
     this.incrementInflight();
@@ -222,6 +207,49 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     } finally {
       await this.hooks.execFinally(ctx);
     }
+  }
+
+  /**
+   * Ends the request lifecycle by finalizing the context.
+   * Decrements INFLIGHT counter and sets response metadata.
+   *
+   * This is the final step in the three-phase request lifecycle:
+   * 1. begin() - Create context, increment metrics
+   * 2. exec() - Execute route handler
+   * 3. end() - Finalize context, decrement metrics
+   *
+   * Sets timing information and response metadata before decrementing INFLIGHT.
+   *
+   * Usage:
+   *   const ctx = router.begin();
+   *   adapter.enrichFromExpress(ctx, req);
+   *   await router.exec(ctx);
+   *   router.end(ctx);
+   *   res.json(ctx.res);
+   *
+   * @param ctx - The context to finalize
+   */
+  public end(ctx: TContext): void {
+    // Set final timestamps
+    ctx.meta.ts.out = Date.now();
+    ctx.meta.ts.execTime = ctx.meta.ts.out - ctx.meta.ts.in;
+
+    // Set response meta
+    const meta = ctx.meta;
+    const clientSeq = ctx.req.invocation?.seq || 0;
+    ctx.res.meta = {
+      ctxId: ctx.id,
+      seq: Number.isInteger(clientSeq) ? clientSeq : 0,
+      traceId: meta.monitor.traceId,
+      spanId: meta.monitor.spanId,
+      inTime: meta.ts.in,
+      outTime: meta.ts.out,
+      execTime: meta.ts.execTime,
+      owd: meta.ts.owd,
+    };
+
+    // Decrement inflight
+    this.decrementInflight();
   }
 
   handle(route: string, handler: (ctx: TContext) => Promise<TContext>) {
