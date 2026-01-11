@@ -76,10 +76,10 @@
     "nodemon": "^3.1.11",
     "prettier": "^3.6.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
   },
   "dependencies": {
-    "jest": "^30.2.0",
     "path-to-regexp": "^8.3.0"
   }
 }
