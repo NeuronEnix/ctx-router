@@ -4,6 +4,8 @@ import { defaultHookExecError } from "./defaultHook/hook.onError";
 import { CtxError } from "./error";
 import { TDefaultCtx, CtxUser } from "./core";
 import { match as pathMatch, MatchFunction } from "path-to-regexp";
+import { STATS } from "./common/const";
+import "./common/helper"; // Auto-starts stats collection
 
 type TRoute<TContext extends TDefaultCtx> = {
   pattern: string;
@@ -146,8 +148,8 @@ export class CtxRouter<TContext extends TDefaultCtx> {
           createdAt: this.instance.CREATED_AT,
           seq,
           inflight: this.instance.INFLIGHT,
-          cpu: 0,
-          mem: 0,
+          cpu: STATS.cpu,
+          mem: STATS.mem,
         },
         ts: {
           in: inTime,

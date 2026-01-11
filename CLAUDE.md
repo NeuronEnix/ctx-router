@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+# Project rules
+- use `const` always, unless absolutely necessary to use `let`
+
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
