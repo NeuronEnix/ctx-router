@@ -1,6 +1,13 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
 
+pnpm lint-staged
+LINT_STATUS=$?
+if [ $LINT_STATUS -ne 0 ]; then
+  echo "Lint failed. Commit aborted."
+  exit 1
+fi
+
 pnpm build
 BUILD_STATUS=$?
 if [ $BUILD_STATUS -ne 0 ]; then
@@ -14,5 +21,3 @@ if [ $TEST_STATUS -ne 0 ]; then
   echo "Tests failed. Commit aborted."
   exit 1
 fi
-
-pnpm lint-staged
