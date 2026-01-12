@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CtxError, ctxErrMap } from "../src/error";
+import { CtxError, ctxErrMap } from "../src/router/error";
 
 describe("CtxError", () => {
   it("sets name and message from constructor", () => {

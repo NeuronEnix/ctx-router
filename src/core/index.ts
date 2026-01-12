@@ -2,7 +2,7 @@ import { CtxMeta } from "./meta";
 import { CtxReq } from "./req";
 import { CtxRes } from "./res";
 import { CtxUser } from "./user";
-import { CtxError } from "../error";
+import { CtxError } from "../router/error";
 
 // Export types
 export type { CtxMeta } from "./meta";

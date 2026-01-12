@@ -34,7 +34,11 @@ function getHeader(
  * @param ctx - Context created by router.getNewCtx()
  * @param req - Express request object
  */
-export function enrichFromExpress(ctx: TDefaultCtx, req: Request, res: Response): void {
+export function enrichFromExpress(
+  ctx: TDefaultCtx,
+  req: Request,
+  res: Response
+): void {
   const method = req.method;
   const path = getPath(req.url);
   const route = `${method} ${path}`;
@@ -121,7 +125,7 @@ export function enrichFromExpress(ctx: TDefaultCtx, req: Request, res: Response)
     ...(Object.keys(transportMeta).length > 0 && { meta: transportMeta }),
     raw: {
       req,
-      res
+      res,
     },
   };
 }

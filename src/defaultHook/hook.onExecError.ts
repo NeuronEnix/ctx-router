@@ -1,7 +1,7 @@
-import { CtxError } from "../error";
+import { CtxError } from "../router/error";
 import { TDefaultCtx } from "../core";
 
-export async function defaultHookExecError<TContext extends TDefaultCtx>(
+export async function defaultHookOnExecError<TContext extends TDefaultCtx>(
   ctx: TContext,
   e: CtxError | Error | unknown
 ): Promise<TContext> {

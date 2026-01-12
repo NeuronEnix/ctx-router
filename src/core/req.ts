@@ -75,7 +75,15 @@ export type CtxReq<Data = Record<string, unknown>> = {
      * Transport protocol identifier.
      * Examples: "http", "grpc", "graphql", "lambda", "sqs", "kafka", "internal"
      */
-    protocol: "http" | "grpc" | "graphql" | "lambda" | "sqs" | "kafka" | "internal" | string;
+    protocol:
+      | "http"
+      | "grpc"
+      | "graphql"
+      | "lambda"
+      | "sqs"
+      | "kafka"
+      | "internal"
+      | string;
 
     /**
      * Protocol-level addressing or operation info.

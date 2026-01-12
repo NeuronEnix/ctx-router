@@ -109,12 +109,19 @@ The router automatically chains these together. See `src/example/api/user/userUp
 
 ### Hook System
 
-The router provides lifecycle hooks:
+The router provides **dual lifecycle hooks** with nested try/catch structure:
 
-- `hookBeforeExec`: Called before route execution (default logs request info)
-- `hookAfterExec`: Called after successful execution
-- `hookExecError`: Called on any error (default sets error response)
-- `hookExecFinally`: Called after execution completes (success or failure)
+**Exec Lifecycle (Outer)** - wraps routing + handler:
+- `hookOnExecBefore`: Before routing (context prep, inject dependencies)
+- `hookOnExecAfter`: After handler completes successfully (exec-level post-processing)
+- `hookOnExecError`: On routing errors or bubbled handler errors (default: formats error response)
+- `hookOnExecFinally`: Always runs (cleanup, telemetry)
+
+**Handler Lifecycle (Inner)** - wraps user's business logic:
+- `hookOnHandlerBefore`: Before user's handler executes (setup, begin transactions)
+- `hookOnHandlerAfter`: After user's handler succeeds (commit transactions)
+- `hookOnHandlerError`: On user's handler error only (rollback transactions)
+- `hookOnHandlerFinally`: Always runs after handler (handler cleanup)
 
 ## Project Structure
 

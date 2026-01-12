@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { CtxRouter } from "../src/router";
+import { CtxRouter } from "../src/router/router";
 import { TDefaultCtx } from "../src/core";
 
 describe("CtxRouter", () => {
@@ -200,10 +200,10 @@ describe("CtxRouter", () => {
   });
 
   describe("hooks", () => {
-    it("calls alterContext hook", async () => {
+    it("calls onExecBefore hook", async () => {
       let hookCalled = false;
 
-      router.hookAlterContext(async (ctx) => {
+      router.hookOnExecBefore(async (ctx) => {
         hookCalled = true;
         return ctx;
       });
