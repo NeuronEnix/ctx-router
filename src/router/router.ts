@@ -10,6 +10,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   private routes: TRoute<TContext>[] = [];
   private hooks: THooks<TContext>;
   public logLevel: LogLevel;
+  public statsEnabled: boolean;
 
   // Router-level INSTANCE
   private readonly instance: TRouterInstance;
@@ -21,6 +22,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
   constructor(config: CtxRouterConfig = {}) {
     this.logLevel = config.logLevel ?? "standard";
+    this.statsEnabled = config.statsEnabled ?? true;
     this.instance = createRouterInstance();
     this.hooks = {
       // Exec lifecycle (outer)
@@ -111,7 +113,13 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   }
 
   async exec(ctx: TContext): Promise<TContext> {
-    return await execImpl(ctx, this.routes, this.hooks, this.instance);
+    return await execImpl(
+      ctx,
+      this.routes,
+      this.hooks,
+      this.instance,
+      this.statsEnabled
+    );
   }
 
   handle(route: string, handler: (ctx: TContext) => Promise<TContext>) {

@@ -32,4 +32,15 @@ export type LogLevel = "none" | "minimal" | "standard" | "verbose";
 
 export type CtxRouterConfig = {
   logLevel?: LogLevel;
+  /**
+   * Enable or disable stats collection (CPU/memory metrics).
+   * Defaults to true.
+   *
+   * Set to false to disable stats updates entirely.
+   * Useful for:
+   * - Performance tuning (avoid process.cpuUsage() calls)
+   * - Compliance (disable telemetry in certain environments)
+   * - Testing (deterministic behavior)
+   */
+  statsEnabled?: boolean;
 };

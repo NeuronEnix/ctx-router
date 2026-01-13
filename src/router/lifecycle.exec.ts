@@ -18,16 +18,20 @@ import { STATS } from "../common/const";
  * @param routes - Array of registered routes
  * @param hooks - Hook functions to run during execution
  * @param instance - Router instance for metrics
+ * @param statsEnabled - Whether to update CPU/memory stats (default: true)
  * @returns The updated context after execution
  */
 export async function exec<TContext extends TDefaultCtx>(
   ctx: TContext,
   routes: TRoute<TContext>[],
   hooks: THooks<TContext>,
-  instance: TRouterInstance
+  instance: TRouterInstance,
+  statsEnabled = true
 ): Promise<TContext> {
   // Update stats lazily (only during traffic, not on background timer)
-  updateStatsIfStale();
+  if (statsEnabled) {
+    updateStatsIfStale();
+  }
 
   // BEGIN LOGIC: Increment inflight, set seq and timing
   const inTime = Date.now();

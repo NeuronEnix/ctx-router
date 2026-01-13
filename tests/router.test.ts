@@ -214,4 +214,95 @@ describe("CtxRouter", () => {
       expect(hookCalled).toBe(true);
     });
   });
+
+  describe("configuration", () => {
+    describe("logLevel", () => {
+      it("defaults to standard", () => {
+        const defaultRouter = new CtxRouter<TDefaultCtx>();
+        expect(defaultRouter.logLevel).toBe("standard");
+      });
+
+      it("accepts custom logLevel", () => {
+        const verboseRouter = new CtxRouter<TDefaultCtx>({ logLevel: "verbose" });
+        expect(verboseRouter.logLevel).toBe("verbose");
+
+        const minimalRouter = new CtxRouter<TDefaultCtx>({ logLevel: "minimal" });
+        expect(minimalRouter.logLevel).toBe("minimal");
+
+        const noneRouter = new CtxRouter<TDefaultCtx>({ logLevel: "none" });
+        expect(noneRouter.logLevel).toBe("none");
+      });
+    });
+
+    describe("statsEnabled", () => {
+      it("defaults to true", () => {
+        const defaultRouter = new CtxRouter<TDefaultCtx>();
+        expect(defaultRouter.statsEnabled).toBe(true);
+      });
+
+      it("accepts statsEnabled: false", () => {
+        const noStatsRouter = new CtxRouter<TDefaultCtx>({ statsEnabled: false });
+        expect(noStatsRouter.statsEnabled).toBe(false);
+      });
+
+      it("accepts statsEnabled: true explicitly", () => {
+        const statsRouter = new CtxRouter<TDefaultCtx>({ statsEnabled: true });
+        expect(statsRouter.statsEnabled).toBe(true);
+      });
+
+      it("executes handler successfully with stats disabled", async () => {
+        const noStatsRouter = new CtxRouter<TDefaultCtx>({
+          statsEnabled: false,
+          logLevel: "none",
+        });
+
+        noStatsRouter.handle("GET /test", async (ctx) => {
+          ctx.res.data = { success: true };
+          return ctx;
+        });
+
+        const ctx = noStatsRouter.createCtx();
+        ctx.req.routeValue = "GET /test";
+        ctx.req.route = "GET /test";
+
+        await noStatsRouter.exec(ctx);
+
+        expect(ctx.res.code).toBe("OK");
+        expect(ctx.res.data).toEqual({ success: true });
+        // Stats should still have default values (-1) or be populated
+        // The test verifies execution works regardless of statsEnabled
+        expect(ctx.meta.ts.in).toBeGreaterThan(0);
+      });
+
+      it("sets instance metrics regardless of statsEnabled", async () => {
+        const noStatsRouter = new CtxRouter<TDefaultCtx>({
+          statsEnabled: false,
+          logLevel: "none",
+        });
+
+        noStatsRouter.handle("GET /test", async (ctx) => ctx);
+
+        const ctx = noStatsRouter.createCtx();
+        ctx.req.routeValue = "GET /test";
+
+        await noStatsRouter.exec(ctx);
+
+        // Instance-level metrics should still be set
+        expect(ctx.meta.instance.seq).toBeGreaterThan(0);
+        expect(ctx.meta.instance.id).toBeDefined();
+        // Context captures inflight at exec start (1), router's INSTANCE is decremented after
+        expect(noStatsRouter.INSTANCE.INFLIGHT).toBe(0);
+      });
+    });
+
+    it("accepts combined configuration", () => {
+      const customRouter = new CtxRouter<TDefaultCtx>({
+        logLevel: "verbose",
+        statsEnabled: false,
+      });
+
+      expect(customRouter.logLevel).toBe("verbose");
+      expect(customRouter.statsEnabled).toBe(false);
+    });
+  });
 });

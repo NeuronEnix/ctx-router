@@ -1,8 +1,8 @@
 # CLAUDE.md
 
 # Project rules
-- use `const` always, unless absolutely necessary to use `let`
 
+- use `const` always, unless absolutely necessary to use `let`
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -39,27 +39,37 @@ pnpm format:staged  # Format staged files (used in pre-commit hook)
 
 ### Core Components
 
-**CtxRouter** (`src/ctx/ctx.router.ts`)
+**CtxRouter** (`src/router/router.ts`)
 
 - Main router class that handles route registration and execution
 - Uses `path-to-regexp` for pattern matching (supports dynamic params like `/user/:userId`)
-- Provides hook system: `beforeExec`, `afterExec`, `execError`, `execFinally`
+- Provides dual lifecycle hook system: exec hooks (outer) and handler hooks (inner)
 - Configurable log levels: `none`, `minimal`, `standard`, `verbose`
+- Configurable stats collection: `statsEnabled` option to enable/disable CPU/memory telemetry
 
-**TDefaultCtx** (`src/ctx/ctx.types.ts`)
+**TDefaultCtx** (`src/core/`)
 
 - Unified context type that normalizes all transports
-- Structure: `{ id, req, res, user, meta }`
-- `req` contains: method, path, data, headers, ip
+- Structure: `{ id, req, res, user, meta, err }`
+- `req` contains: data, route, routeValue, params, auth, client, invocation, transport
 - `res` contains: code, msg, data, optional meta
-- `meta` tracks: service info, timing, monitoring (traceId/spanId), logs
+- `meta` tracks: service info, instance metrics, timing, monitoring (traceId/spanId), logs
 - Extend this type for your application's needs (e.g., custom user fields)
 
-**Context Converters** (`src/transform/`)
+**Adapters** (`src/adapter/`)
 
-- `toCtx.fromExpress()` - Converts Express Request to TDefaultCtx
-- Additional converters can be added following the same pattern
-- Converters extract method, path, headers, body into unified format
+- `enrichFromExpress()` - Enriches context with Express request data
+- Adapters enrich an existing context created by `router.createCtx()`
+- Additional adapters can be added for Lambda, gRPC, SQS, etc.
+- Adapters extract method, path, headers, body, auth into unified format
+
+**Route Utilities** (`src/router/route.ts`)
+
+- `buildRoute()` - Build canonical route strings that avoid `:` conflicts
+- `parseRoute()` - Parse canonical route strings into segments
+- `isCanonicalRoute()` - Validate route format
+- Format: `<protocol> <operation> [<path>]` (space-delimited)
+- Examples: `http GET /user/:id`, `sqs order.created`, `grpc CreateUser`
 
 ### Handler Pattern
 
@@ -112,12 +122,14 @@ The router automatically chains these together. See `src/example/api/user/userUp
 The router provides **dual lifecycle hooks** with nested try/catch structure:
 
 **Exec Lifecycle (Outer)** - wraps routing + handler:
+
 - `hookOnExecBefore`: Before routing (context prep, inject dependencies)
 - `hookOnExecAfter`: After handler completes successfully (exec-level post-processing)
 - `hookOnExecError`: On routing errors or bubbled handler errors (default: formats error response)
 - `hookOnExecFinally`: Always runs (cleanup, telemetry)
 
 **Handler Lifecycle (Inner)** - wraps user's business logic:
+
 - `hookOnHandlerBefore`: Before user's handler executes (setup, begin transactions)
 - `hookOnHandlerAfter`: After user's handler succeeds (commit transactions)
 - `hookOnHandlerError`: On user's handler error only (rollback transactions)
@@ -127,51 +139,116 @@ The router provides **dual lifecycle hooks** with nested try/catch structure:
 
 ```
 src/
-├── ctx/
-│   ├── ctx.router.ts      # Main CtxRouter class
-│   ├── ctx.types.ts       # TDefaultCtx and USER_ROLE definitions
-│   └── ctx.err.ts         # CtxError and ctxErrMap utilities
-├── transform/
-│   ├── fromExpress.ts     # Express → Context converter
-│   └── index.ts           # Transform utilities and exports
-├── defaultHandler/
-│   ├── handle.beforeExec.ts  # Default pre-execution hook
-│   └── handle.onError.ts     # Default error handler
-├── example/
-│   ├── router.ts          # Example router configuration
-│   ├── express.ts         # Example Express integration
-│   └── api/               # Example API handlers
-│       ├── health/        # Health check endpoints
-│       └── user/          # User endpoints (update, detail)
+├── router/
+│   ├── router.ts          # Main CtxRouter class
+│   ├── types.ts           # Type definitions (THooks, LogLevel, Config)
+│   ├── error.ts           # CtxError and ctxErrMap utilities
+│   ├── route.ts           # Canonical route utilities (buildRoute, parseRoute)
+│   ├── lifecycle.exec.ts  # Exec lifecycle implementation
+│   ├── instance.ts        # Router instance metrics
+│   └── index.ts           # Router exports
+├── core/
+│   ├── index.ts           # Core type exports (TDefaultCtx, etc.)
+│   ├── req.ts             # Request type definition
+│   ├── res.ts             # Response type definition
+│   ├── user.ts            # User type and roles
+│   └── meta.ts            # Metadata type definition
+├── adapter/
+│   ├── express.v5.ts      # Express adapter (enrichFromExpress)
+│   └── index.ts           # Adapter exports
+├── common/
+│   ├── const.ts           # Constants (STATS_INTERVAL_MS, STATS)
+│   └── helper.ts          # Helper functions (updateStatsIfStale)
+├── defaultHook/
+│   ├── hook.onExecBefore.ts  # Default pre-execution hook
+│   └── hook.onExecError.ts   # Default error handler
 └── index.ts               # Main export file
 ```
 
 ## Implementation Guidelines
 
-### Adding a New Transport Converter
+### Using Canonical Route Format
 
-Create a new file in `src/transform/` following the pattern:
+Use the `buildRoute()` helper to create transport-agnostic route strings:
 
 ```typescript
-export function transformFromYourTransport(
+import { route } from "ctx-router";
+
+// HTTP routes
+const httpRoute = route.buildRoute("http", "GET", "/user/:id");
+router.handle(httpRoute, handler); // "http GET /user/:id"
+
+// Queue routes
+const sqsRoute = route.buildRoute("sqs", "order.created");
+router.handle(sqsRoute, handler); // "sqs order.created"
+
+// gRPC routes
+const grpcRoute = route.buildRoute("grpc", "CreateUser");
+router.handle(grpcRoute, handler); // "grpc CreateUser"
+
+// Parse routes back into segments
+const segments = route.parseRoute("http GET /user/:id");
+// => { protocol: "http", operation: "GET", path: "/user/:id" }
+
+// Validate route format
+route.isCanonicalRoute("http GET /user/:id"); // true
+route.isCanonicalRoute("/user/:id"); // false (legacy format)
+```
+
+**Note:** Legacy route formats (e.g., `GET /user/:id`) still work for HTTP but won't support multi-transport patterns.
+
+### Configuring Telemetry
+
+Control stats collection (CPU/memory metrics) via router config:
+
+```typescript
+// Disable stats collection (better performance, no telemetry)
+const router = new CtxRouter({ statsEnabled: false });
+
+// Enable stats collection (default behavior)
+const router = new CtxRouter({ statsEnabled: true });
+
+// Stats are updated lazily during traffic (no background interval)
+// Frequency: every 5 seconds (STATS_INTERVAL_MS)
+```
+
+Use cases for disabling stats:
+
+- Performance tuning (avoid `process.cpuUsage()` overhead)
+- Compliance requirements (no telemetry in certain environments)
+- Testing (deterministic behavior without metrics)
+
+### Adding a New Transport Adapter
+
+Create a new file in `src/adapter/` following the pattern:
+
+```typescript
+export function enrichFromYourTransport(
+  ctx: TDefaultCtx,
   input: YourTransportType
-): TDefaultCtx {
-  return {
-    id: generateId(),
-    req: {
-      method: extractMethod(input),
-      path: extractPath(input),
-      data: extractBody(input),
-      header: extractHeaders(input),
-      ip: extractIp(input),
-      ips: [],
-    },
-    // ... rest of context
+): void {
+  // Build route value
+  const routeValue = buildRouteValue(input);
+
+  // Enrich ctx.req
+  ctx.req.data = extractData(input);
+  ctx.req.routeValue = routeValue;
+  ctx.req.route = routeValue; // Router will reassign after matching
+
+  // Optional: set auth, client, invocation fields
+  if (hasAuth(input)) {
+    ctx.req.auth = extractAuth(input);
+  }
+
+  // Set transport details
+  ctx.req.transport = {
+    protocol: "your-protocol",
+    raw: input,
   };
 }
 ```
 
-Export it from `src/index.ts` under the `toCtx` namespace.
+Export it from `src/index.ts` under the `adapter` namespace.
 
 ### Adding New Routes
 
@@ -189,15 +266,26 @@ if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
 throw ctxErr.auth.UNAUTHORIZED();
 ```
 
-### Logging Configuration
+### Logging and Telemetry Configuration
 
-Control logging verbosity when creating the router:
+Control logging verbosity and stats collection when creating the router:
 
 ```typescript
+// Log levels
 new CtxRouter<TCtx>({ logLevel: "minimal" }); // Only method, path, traceId
 new CtxRouter<TCtx>({ logLevel: "standard" }); // Essential info (default)
 new CtxRouter<TCtx>({ logLevel: "verbose" }); // All request details
 new CtxRouter<TCtx>({ logLevel: "none" }); // No logging
+
+// Stats collection
+new CtxRouter<TCtx>({ statsEnabled: true }); // Enable CPU/memory metrics (default)
+new CtxRouter<TCtx>({ statsEnabled: false }); // Disable metrics for better performance
+
+// Combined configuration
+new CtxRouter<TCtx>({
+  logLevel: "minimal",
+  statsEnabled: false, // Optimal for high-throughput production
+});
 ```
 
 ## Key Dependencies
