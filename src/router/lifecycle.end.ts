@@ -28,7 +28,7 @@ export function end<TContext extends TDefaultCtx>(
   const clientSeq = ctx.req.invocation?.seq || 0;
   ctx.res.meta = {
     ctxId: ctx.id,
-    seq: Number.isInteger(clientSeq) ? clientSeq : 0,
+    seq: Number.isInteger(clientSeq) ? clientSeq : -1,
     traceId: meta.monitor.traceId,
     spanId: meta.monitor.spanId,
     inTime: meta.ts.in,

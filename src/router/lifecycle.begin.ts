@@ -65,9 +65,9 @@ export function begin<TContext extends TDefaultCtx>(
       ts: {
         in: inTime,
         clientIn: inTime,
-        out: 0,
-        execTime: 0,
-        owd: 0,
+        out: -1,
+        execTime: -1,
+        owd: -1,
       },
       monitor: {
         traceId,

@@ -54,8 +54,8 @@ export function enrichFromExpress(
   ctx.meta.ts = {
     in: ctx.meta.ts.in,
     clientIn: validClientIn,
-    out: 0,
-    execTime: 0,
+    out: -1,
+    execTime: -1,
     owd: ctx.meta.ts.in - validClientIn,
   };
 

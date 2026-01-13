@@ -27,7 +27,7 @@ export type CtxMeta = {
     readonly mem: number;
   };
 
-  /** Execution timestamps (epoch ms, 0 if unavailable) */
+  /** Execution timestamps (epoch ms, -1 if unavailable) */
   ts: {
     /** When execution entered the system */
     readonly in: number;
