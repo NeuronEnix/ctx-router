@@ -77,10 +77,11 @@ export async function exec<TContext extends TDefaultCtx>(
     await hooks.onExecBefore(ctx);
 
     // 2. Route matching (router logic)
+    const routeOriginal = ctx.req.route.original;
     const match = routes
       .map((route) => ({
         route,
-        result: route.matcher(ctx.req.routeValue),
+        result: route.matcher(routeOriginal),
       }))
       .find((m) => m.result !== false);
 
@@ -88,12 +89,12 @@ export async function exec<TContext extends TDefaultCtx>(
       throw new CtxError({
         name: "HANDLER_NOT_FOUND",
         msg: "Handler not found",
-        data: { routeValue: ctx.req.routeValue },
+        data: { routeOriginal },
       });
     }
 
     // Update route to matched pattern (e.g., "GET /user/:userId")
-    ctx.req.route = match.route.pattern;
+    ctx.req.route.pattern = match.route.pattern;
 
     // Set route params (router no longer merges into ctx.req.data)
     ctx.req.params = match.result.params as Record<string, string>;

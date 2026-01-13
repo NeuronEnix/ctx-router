@@ -67,10 +67,13 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       id: "PENDING", // Set in exec()
       req: {
         data: {},
-        route: "PENDING", // Router will set in exec
-        routeValue: "PENDING", // Adapter will set
-        transport: {
+        route: {
           protocol: "unknown",
+          action: "PENDING", // Adapter will set
+          pattern: "PENDING", // Router will set in exec
+          original: "PENDING", // Adapter will set
+        },
+        transport: {
           raw: null,
         },
       },

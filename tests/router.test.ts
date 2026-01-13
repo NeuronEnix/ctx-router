@@ -2,6 +2,20 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { CtxRouter } from "../src/router/router";
 import { TDefaultCtx } from "../src/core";
 
+function setRoute(
+  ctx: TDefaultCtx,
+  route: string,
+  protocol = "http"
+): void {
+  const [action = "unknown"] = route.split(" ");
+  ctx.req.route = {
+    protocol,
+    action,
+    pattern: route,
+    original: route,
+  };
+}
+
 describe("CtxRouter", () => {
   let router: CtxRouter<TDefaultCtx>;
 
@@ -87,8 +101,7 @@ describe("CtxRouter", () => {
       });
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /test";
-      ctx.req.route = "GET /test";
+      setRoute(ctx, "GET /test");
 
       await router.exec(ctx);
 
@@ -102,8 +115,7 @@ describe("CtxRouter", () => {
       });
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /user/123";
-      ctx.req.route = "GET /user/123";
+      setRoute(ctx, "GET /user/123");
 
       await router.exec(ctx);
 
@@ -115,8 +127,7 @@ describe("CtxRouter", () => {
   describe("exec()", () => {
     it("throws HANDLER_NOT_FOUND for unregistered route", async () => {
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /unknown";
-      ctx.req.route = "GET /unknown";
+      setRoute(ctx, "GET /unknown");
 
       await router.exec(ctx);
 
@@ -130,8 +141,7 @@ describe("CtxRouter", () => {
       });
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "POST /data";
-      ctx.req.route = "POST /data";
+      setRoute(ctx, "POST /data");
 
       await router.exec(ctx);
 
@@ -143,19 +153,18 @@ describe("CtxRouter", () => {
       router.handle("GET /item/:id", async (ctx) => ctx);
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /item/456";
-      ctx.req.route = "GET /item/456";
+      setRoute(ctx, "GET /item/456");
 
       await router.exec(ctx);
 
-      expect(ctx.req.route).toBe("GET /item/:id");
+      expect(ctx.req.route.pattern).toBe("GET /item/:id");
     });
 
     it("sets timing metadata after execution", async () => {
       router.handle("GET /test", async (ctx) => ctx);
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /test";
+      setRoute(ctx, "GET /test");
 
       await router.exec(ctx);
 
@@ -168,7 +177,7 @@ describe("CtxRouter", () => {
       router.handle("GET /test", async (ctx) => ctx);
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /test";
+      setRoute(ctx, "GET /test");
 
       await router.exec(ctx);
 
@@ -186,7 +195,7 @@ describe("CtxRouter", () => {
       expect(router.INSTANCE.INFLIGHT).toBe(0);
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /test";
+      setRoute(ctx, "GET /test");
 
       await router.exec(ctx);
 
@@ -206,8 +215,7 @@ describe("CtxRouter", () => {
       router.handle("GET /test", async (ctx) => ctx);
 
       const ctx = router.createCtx();
-      ctx.req.routeValue = "GET /test";
-      ctx.req.route = "GET /test";
+      setRoute(ctx, "GET /test");
 
       await router.exec(ctx);
 
@@ -262,8 +270,7 @@ describe("CtxRouter", () => {
         });
 
         const ctx = noStatsRouter.createCtx();
-        ctx.req.routeValue = "GET /test";
-        ctx.req.route = "GET /test";
+        setRoute(ctx, "GET /test");
 
         await noStatsRouter.exec(ctx);
 
@@ -283,7 +290,7 @@ describe("CtxRouter", () => {
         noStatsRouter.handle("GET /test", async (ctx) => ctx);
 
         const ctx = noStatsRouter.createCtx();
-        ctx.req.routeValue = "GET /test";
+        setRoute(ctx, "GET /test");
 
         await noStatsRouter.exec(ctx);
 

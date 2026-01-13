@@ -25,8 +25,8 @@ This document captures the full refactor intent, rationale, and implementation d
 
 The router only relies on the following fields; everything else can be extended by users.
 
-- `ctx.req.routeValue` is the concrete string to match.
-- `ctx.req.route` is set by the router to the matched pattern.
+- `ctx.req.route.original` is the concrete string to match.
+- `ctx.req.route.pattern` is set by the router to the matched pattern.
 - `ctx.req.data` is an object; router will not mutate it.
 - `ctx.res` exists and can be written to.
 - `ctx.meta` exists to carry timing and trace fields; router owns the core timing values.

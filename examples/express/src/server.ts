@@ -12,7 +12,7 @@ app.use(express.urlencoded({ extended: true }));
 router.hookOnExecBefore(async (ctx) => {
   // Demonstrate hook functionality by logging
   console.log(
-    `[onExecBefore] Processing request ${ctx.id} - ${ctx.req.routeValue}`
+    `[onExecBefore] Processing request ${ctx.id} - ${ctx.req.route.original}`
   );
   return ctx;
 });
@@ -30,7 +30,7 @@ app.use(async (req: Request, res: Response) => {
 
   // 2. Enrich context with Express request data
   adapter.enrichFromExpress(ctx, req, res);
-  console.log(`[2. Enriched] RouteValue: ${ctx.req.routeValue}`);
+  console.log(`[2. Enriched] RouteOriginal: ${ctx.req.route.original}`);
 
   // 3. Execute route handler (begins lifecycle, runs hooks, ends lifecycle)
   await router.exec(ctx);

@@ -41,7 +41,7 @@ export function enrichFromExpress(
 ): void {
   const method = req.method;
   const path = getPath(req.url);
-  const route = `${method} ${path}`;
+  const routeValue = `${method} ${path}`;
 
   // Build auth (only include fields that exist)
   const bearerToken = extractBearerToken(req.headers.authorization);
@@ -90,15 +90,18 @@ export function enrichFromExpress(
 
   // Enrich ctx.req
   ctx.req.data = { ...req.body, ...req.query, ...req.params };
-  ctx.req.routeValue = route;
-  ctx.req.route = route; // Router will reassign to pattern after matching
+  ctx.req.route = {
+    protocol: "http",
+    action: method,
+    pattern: routeValue, // Router will reassign to pattern after matching
+    original: routeValue,
+  };
 
   if (Object.keys(auth).length > 0) ctx.req.auth = auth;
   if (Object.keys(client).length > 0) ctx.req.client = client;
   if (Object.keys(invocation).length > 0) ctx.req.invocation = invocation;
 
   ctx.req.transport = {
-    protocol: "http",
     request: {
       method,
       path,

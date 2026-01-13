@@ -14,27 +14,54 @@ export type CtxReq<Data = Record<string, unknown>> = {
   params?: Record<string, string>;
 
   /**
-   * Canonical route pattern (low-cardinality, first-class).
-   * Examples:
-   * - "GET /users/:id"
-   * - "sqs:order.created"
-   * - "internal cleanup.run"
-   *
-   * Adapter initially sets this to the raw path.
-   * Router reassigns after finding matching pattern.
+   * Route data (protocol + action + pattern).
+   * Adapter sets protocol/action/original.
+   * Router reassigns pattern after matching.
    */
-  route: string;
+  route: {
+    /**
+     * Transport protocol identifier.
+     * Examples: "http", "grpc", "graphql", "lambda", "sqs", "kafka", "internal"
+     */
+    protocol:
+      | "http"
+      | "grpc"
+      | "graphql"
+      | "lambda"
+      | "sqs"
+      | "kafka"
+      | "internal"
+      | string;
 
-  /**
-   * Concrete route for this invocation (may be high-cardinality).
-   * Examples:
-   * - "GET /users/123"
-   * - "sqs:order.created"
-   *
-   * Adapter sets this to the raw path.
-   * Remains unchanged after routing.
-   */
-  routeValue: string;
+    /**
+     * Action or operation identifier.
+     * Examples: "GET", "order.created", "CreateUser", "cleanup.run"
+     */
+    action: string;
+
+    /**
+     * Canonical route pattern (low-cardinality, first-class).
+     * Examples:
+     * - "GET /users/:id"
+     * - "sqs order.created"
+     * - "internal cleanup.run"
+     *
+     * Adapter initially sets this to the raw path.
+     * Router reassigns after finding matching pattern.
+     */
+    pattern: string;
+
+    /**
+     * Concrete route for this invocation (may be high-cardinality).
+     * Examples:
+     * - "GET /users/123"
+     * - "sqs order.created"
+     *
+     * Adapter sets this to the raw path.
+     * Remains unchanged after routing.
+     */
+    original: string;
+  };
 
   /**
    * Raw authorization payload from the ingress.
@@ -78,20 +105,6 @@ export type CtxReq<Data = Record<string, unknown>> = {
    * Not intended for business logic.
    */
   transport?: {
-    /**
-     * Transport protocol identifier.
-     * Examples: "http", "grpc", "graphql", "lambda", "sqs", "kafka", "internal"
-     */
-    protocol:
-      | "http"
-      | "grpc"
-      | "graphql"
-      | "lambda"
-      | "sqs"
-      | "kafka"
-      | "internal"
-      | string;
-
     /**
      * Protocol-level addressing or operation info.
      */
