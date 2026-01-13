@@ -21,8 +21,12 @@ export async function auth(ctx: TCtx): Promise<TCtx> {
 }
 
 export async function validate(ctx: TCtx): Promise<TReqData> {
-  // Validate request data and return the request data
-  return ctx.req.data as TReqData;
+  // Validate request data and merge route params
+  // Route params are now in ctx.req.params (not merged into data by router)
+  return {
+    ...ctx.req.data,
+    ...ctx.req.params,
+  } as TReqData;
 }
 
 type TReqData = {

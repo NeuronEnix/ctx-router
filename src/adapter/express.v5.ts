@@ -43,22 +43,6 @@ export function enrichFromExpress(
   const path = getPath(req.url);
   const route = `${method} ${path}`;
 
-  // Extract clientIn from header and validate
-  const clientInStr = getHeader(req.headers, "x-ctx-ts");
-  const clientIn = clientInStr
-    ? new Date(clientInStr).getTime()
-    : ctx.meta.ts.in;
-  const validClientIn = isNaN(clientIn) ? ctx.meta.ts.in : clientIn;
-
-  // Update client timestamp and owd (replace entire ts object to handle readonly properties)
-  ctx.meta.ts = {
-    in: ctx.meta.ts.in,
-    clientIn: validClientIn,
-    out: -1,
-    execTime: -1,
-    owd: ctx.meta.ts.in - validClientIn,
-  };
-
   // Build auth (only include fields that exist)
   const bearerToken = extractBearerToken(req.headers.authorization);
   const apiKey = getHeader(req.headers, "x-api-key");
@@ -89,10 +73,13 @@ export function enrichFromExpress(
     getHeader(req.headers, "x-ctx-seq") || "0",
     10
   );
+  const clientTsStr = getHeader(req.headers, "x-ctx-ts");
+  const clientTs = clientTsStr ? new Date(clientTsStr).getTime() : undefined;
+
   const invocation: TDefaultCtx["req"]["invocation"] = {};
   if (invocationTraceId) invocation.traceId = invocationTraceId;
   if (invocationSeq) invocation.seq = invocationSeq;
-  if (validClientIn) invocation.ts = validClientIn;
+  if (clientTs && !isNaN(clientTs)) invocation.ts = clientTs;
 
   // Build transport meta (only include fields that exist)
   const userAgent = getHeader(req.headers, "user-agent");

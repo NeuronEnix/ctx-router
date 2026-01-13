@@ -7,6 +7,13 @@ export type CtxReq<Data = Record<string, unknown>> = {
   data: Data;
 
   /**
+   * Matched route parameters from the router.
+   * Set by the router during route matching.
+   * Example: For route "/users/:id" matched with "/users/123", params = { id: "123" }
+   */
+  params?: Record<string, string>;
+
+  /**
    * Canonical route pattern (low-cardinality, first-class).
    * Examples:
    * - "GET /users/:id"

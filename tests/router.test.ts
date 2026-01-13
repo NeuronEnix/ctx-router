@@ -28,37 +28,28 @@ describe("CtxRouter", () => {
     });
   });
 
-  describe("begin()", () => {
-    it("creates context with traceId", () => {
-      const ctx = router.begin();
+  describe("createCtx()", () => {
+    it("creates context with default values", () => {
+      const ctx = router.createCtx();
 
-      expect(ctx.id).toMatch(/^[a-f0-9]+-1$/);
-      expect(ctx.meta.monitor.traceId).toBe(ctx.id);
-      expect(ctx.meta.monitor.spanId).toBe(ctx.id);
+      expect(ctx.id).toBe("PENDING"); // Set in exec()
+      expect(ctx.meta.monitor.traceId).toBe("PENDING");
+      expect(ctx.meta.monitor.spanId).toBe("PENDING");
     });
 
-    it("increments SEQ for each begin call", () => {
+    it("does not increment SEQ or INFLIGHT", () => {
       expect(router.INSTANCE.SEQ).toBe(0);
-
-      router.begin();
-      expect(router.INSTANCE.SEQ).toBe(1);
-
-      router.begin();
-      expect(router.INSTANCE.SEQ).toBe(2);
-    });
-
-    it("increments INFLIGHT on begin", () => {
       expect(router.INSTANCE.INFLIGHT).toBe(0);
 
-      router.begin();
-      expect(router.INSTANCE.INFLIGHT).toBe(1);
+      router.createCtx();
+      router.createCtx();
 
-      router.begin();
-      expect(router.INSTANCE.INFLIGHT).toBe(2);
+      expect(router.INSTANCE.SEQ).toBe(0);
+      expect(router.INSTANCE.INFLIGHT).toBe(0);
     });
 
     it("creates context with default user", () => {
-      const ctx = router.begin();
+      const ctx = router.createCtx();
 
       expect(ctx.user).toEqual({
         kind: "user",
@@ -70,7 +61,7 @@ describe("CtxRouter", () => {
     });
 
     it("creates context with default response", () => {
-      const ctx = router.begin();
+      const ctx = router.createCtx();
 
       expect(ctx.res).toEqual({
         code: "OK",
@@ -79,50 +70,12 @@ describe("CtxRouter", () => {
       });
     });
 
-    it("sets timestamp metadata", () => {
-      const before = Date.now();
-      const ctx = router.begin();
-      const after = Date.now();
+    it("sets placeholder timing metadata", () => {
+      const ctx = router.createCtx();
 
-      expect(ctx.meta.ts.in).toBeGreaterThanOrEqual(before);
-      expect(ctx.meta.ts.in).toBeLessThanOrEqual(after);
-    });
-  });
-
-  describe("end()", () => {
-    it("decrements INFLIGHT", () => {
-      const ctx = router.begin();
-      expect(router.INSTANCE.INFLIGHT).toBe(1);
-
-      router.end(ctx);
-      expect(router.INSTANCE.INFLIGHT).toBe(0);
-    });
-
-    it("sets output timestamp", () => {
-      const ctx = router.begin();
+      expect(ctx.meta.ts.in).toBe(-1); // Set in exec()
       expect(ctx.meta.ts.out).toBe(-1);
-
-      router.end(ctx);
-      expect(ctx.meta.ts.out).toBeGreaterThan(0);
-    });
-
-    it("calculates execTime", () => {
-      const ctx = router.begin();
-
-      router.end(ctx);
-
-      expect(ctx.meta.ts.execTime).toBeGreaterThanOrEqual(0);
-      expect(ctx.meta.ts.execTime).toBe(ctx.meta.ts.out - ctx.meta.ts.in);
-    });
-
-    it("sets response meta", () => {
-      const ctx = router.begin();
-
-      router.end(ctx);
-
-      expect(ctx.res.meta).toBeDefined();
-      expect(ctx.res.meta?.ctxId).toBe(ctx.id);
-      expect(ctx.res.meta?.traceId).toBe(ctx.meta.monitor.traceId);
+      expect(ctx.meta.ts.execTime).toBe(-1);
     });
   });
 
@@ -133,7 +86,7 @@ describe("CtxRouter", () => {
         return ctx;
       });
 
-      const ctx = router.begin();
+      const ctx = router.createCtx();
       ctx.req.routeValue = "GET /test";
       ctx.req.route = "GET /test";
 
@@ -144,24 +97,24 @@ describe("CtxRouter", () => {
 
     it("supports path parameters", async () => {
       router.handle("GET /user/:userId", async (ctx) => {
-        ctx.res.data = { userId: ctx.req.data.userId };
+        ctx.res.data = { userId: ctx.req.params?.userId };
         return ctx;
       });
 
-      const ctx = router.begin();
+      const ctx = router.createCtx();
       ctx.req.routeValue = "GET /user/123";
       ctx.req.route = "GET /user/123";
 
       await router.exec(ctx);
 
-      expect(ctx.req.data.userId).toBe("123");
+      expect(ctx.req.params?.userId).toBe("123");
       expect(ctx.res.data).toEqual({ userId: "123" });
     });
   });
 
   describe("exec()", () => {
     it("throws HANDLER_NOT_FOUND for unregistered route", async () => {
-      const ctx = router.begin();
+      const ctx = router.createCtx();
       ctx.req.routeValue = "GET /unknown";
       ctx.req.route = "GET /unknown";
 
@@ -176,7 +129,7 @@ describe("CtxRouter", () => {
         return ctx;
       });
 
-      const ctx = router.begin();
+      const ctx = router.createCtx();
       ctx.req.routeValue = "POST /data";
       ctx.req.route = "POST /data";
 
@@ -189,13 +142,55 @@ describe("CtxRouter", () => {
     it("updates route to pattern after matching", async () => {
       router.handle("GET /item/:id", async (ctx) => ctx);
 
-      const ctx = router.begin();
+      const ctx = router.createCtx();
       ctx.req.routeValue = "GET /item/456";
       ctx.req.route = "GET /item/456";
 
       await router.exec(ctx);
 
       expect(ctx.req.route).toBe("GET /item/:id");
+    });
+
+    it("sets timing metadata after execution", async () => {
+      router.handle("GET /test", async (ctx) => ctx);
+
+      const ctx = router.createCtx();
+      ctx.req.routeValue = "GET /test";
+
+      await router.exec(ctx);
+
+      expect(ctx.meta.ts.in).toBeGreaterThan(0);
+      expect(ctx.meta.ts.out).toBeGreaterThan(0);
+      expect(ctx.meta.ts.execTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it("sets response meta after execution", async () => {
+      router.handle("GET /test", async (ctx) => ctx);
+
+      const ctx = router.createCtx();
+      ctx.req.routeValue = "GET /test";
+
+      await router.exec(ctx);
+
+      expect(ctx.res.meta).toBeDefined();
+      expect(ctx.res.meta?.ctxId).toMatch(/^[a-f0-9]+-1$/);
+      expect(ctx.res.meta?.traceId).toBe(ctx.id);
+    });
+
+    it("increments and decrements INFLIGHT during execution", async () => {
+      router.handle("GET /test", async (ctx) => {
+        expect(router.INSTANCE.INFLIGHT).toBe(1);
+        return ctx;
+      });
+
+      expect(router.INSTANCE.INFLIGHT).toBe(0);
+
+      const ctx = router.createCtx();
+      ctx.req.routeValue = "GET /test";
+
+      await router.exec(ctx);
+
+      expect(router.INSTANCE.INFLIGHT).toBe(0);
     });
   });
 
@@ -210,7 +205,7 @@ describe("CtxRouter", () => {
 
       router.handle("GET /test", async (ctx) => ctx);
 
-      const ctx = router.begin();
+      const ctx = router.createCtx();
       ctx.req.routeValue = "GET /test";
       ctx.req.route = "GET /test";
 

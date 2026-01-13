@@ -8,11 +8,11 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Register alterContext hook for custom context modifications
-router.hookAlterContext(async (ctx) => {
+// Register exec before hook for custom context modifications
+router.hookOnExecBefore(async (ctx) => {
   // Demonstrate hook functionality by logging
   console.log(
-    `[alterContext] Processing request ${ctx.id} - ${ctx.req.routeValue}`
+    `[onExecBefore] Processing request ${ctx.id} - ${ctx.req.routeValue}`
   );
   return ctx;
 });
@@ -24,27 +24,21 @@ function getHttpCode(ctx: TCtx) {
 }
 
 app.use(async (req: Request, res: Response) => {
-  // 1. Begin request lifecycle - creates context, increments INFLIGHT & SEQ
-  const ctx: TCtx = router.begin();
-  console.log(
-    `[1. Begin] ID: ${ctx.id}, SEQ: ${ctx.meta.instance.seq}, INFLIGHT: ${ctx.meta.instance.inflight}`
-  );
+  // 1. Create context with default values (no side effects)
+  const ctx: TCtx = router.createCtx();
+  console.log(`[1. createCtx] Created context with ID: ${ctx.id}`);
 
   // 2. Enrich context with Express request data
   adapter.enrichFromExpress(ctx, req, res);
   console.log(`[2. Enriched] RouteValue: ${ctx.req.routeValue}`);
 
-  // 3. Execute route handler (with hooks)
+  // 3. Execute route handler (begins lifecycle, runs hooks, ends lifecycle)
   await router.exec(ctx);
-  console.log(`[3. Executed] ${ctx.res.code}`);
-
-  // 4. End request lifecycle - finalizes context, decrements INFLIGHT
-  router.end(ctx);
   console.log(
-    `[4. End] INFLIGHT after: ${router.INSTANCE.INFLIGHT}\n`
+    `[3. Executed] ${ctx.res.code}, ID: ${ctx.id}, SEQ: ${ctx.meta.instance.seq}, INFLIGHT: ${router.INSTANCE.INFLIGHT}\n`
   );
 
-  // 5. Send response
+  // 4. Send response
   res.type("application/json").status(getHttpCode(ctx)).send(ctx.res);
 });
 

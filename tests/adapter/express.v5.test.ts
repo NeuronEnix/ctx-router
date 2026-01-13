@@ -29,7 +29,7 @@ describe("enrichFromExpress", () => {
 
   beforeEach(() => {
     router = new CtxRouter<TDefaultCtx>({ logLevel: "none" });
-    ctx = router.begin();
+    ctx = router.createCtx();
     res = createMockResponse();
   });
 
@@ -226,7 +226,7 @@ describe("enrichFromExpress", () => {
   });
 
   describe("timestamp handling", () => {
-    it("uses x-ctx-ts header for clientIn timestamp", () => {
+    it("sets req.invocation.ts from x-ctx-ts header", () => {
       const clientTimestamp = new Date("2024-01-01T12:00:00Z").toISOString();
       const req = createMockRequest({
         headers: {
@@ -236,21 +236,20 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.meta.ts.clientIn).toBe(
+      expect(ctx.req.invocation?.ts).toBe(
         new Date("2024-01-01T12:00:00Z").getTime()
       );
     });
 
-    it("falls back to server timestamp when x-ctx-ts is missing", () => {
-      const serverIn = ctx.meta.ts.in;
+    it("does not set req.invocation.ts when x-ctx-ts is missing", () => {
       const req = createMockRequest();
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.meta.ts.clientIn).toBe(serverIn);
+      expect(ctx.req.invocation?.ts).toBeUndefined();
     });
 
-    it("calculates owd (one-way delay)", () => {
+    it("does not mutate meta.ts (timing computed in exec)", () => {
       const pastTime = new Date(Date.now() - 100).toISOString();
       const req = createMockRequest({
         headers: {
@@ -258,9 +257,11 @@ describe("enrichFromExpress", () => {
         },
       });
 
+      const originalTsIn = ctx.meta.ts.in;
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.meta.ts.owd).toBeGreaterThan(0);
+      // Adapter does not touch meta.ts
+      expect(ctx.meta.ts.in).toBe(originalTsIn);
     });
   });
 });

@@ -2,16 +2,13 @@ import { match as pathMatch } from "path-to-regexp";
 import { defaultHookOnExecBefore } from "../defaultHook/hook.onExecBefore";
 import { defaultHookOnExecError } from "../defaultHook/hook.onExecError";
 import { TDefaultCtx } from "../core";
-import "../common/helper"; // Auto-starts stats collection
 import { TRoute, THooks, LogLevel, CtxRouterConfig } from "./types";
 import { TRouterInstance, createRouterInstance } from "./instance";
-import { begin as beginImpl } from "./lifecycle.begin";
 import { exec as execImpl } from "./lifecycle.exec";
-import { end as endImpl } from "./lifecycle.end";
 
 export class CtxRouter<TContext extends TDefaultCtx> {
   private routes: TRoute<TContext>[] = [];
-  private hooks: THooks;
+  private hooks: THooks<TContext>;
   public logLevel: LogLevel;
 
   // Router-level INSTANCE
@@ -40,24 +37,81 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   }
 
   // Exec lifecycle hook setters
-  hookOnExecBefore(handler: THooks["onExecBefore"]) {
+  hookOnExecBefore(handler: THooks<TContext>["onExecBefore"]) {
     this.hooks.onExecBefore = handler;
   }
 
-  hookOnExecAfter(handler: THooks["onExecAfter"]) {
+  hookOnExecAfter(handler: THooks<TContext>["onExecAfter"]) {
     this.hooks.onExecAfter = handler;
   }
 
-  public begin(): TContext {
-    return beginImpl<TContext>(this.instance);
+  /**
+   * Creates a new context with default values.
+   * Does NOT increment inflight or set timing - that happens in exec().
+   * Adapters should enrich the returned context before calling exec().
+   */
+  public createCtx(): TContext {
+    // Build default user (anonymous)
+    const user = {
+      kind: "user" as const,
+      id: "none",
+      role: ["none" as const],
+      scope: [],
+      handle: null,
+    };
+
+    // Build ctx with defaults (timing and tracing set in exec())
+    const ctx: TDefaultCtx = {
+      id: "PENDING", // Set in exec()
+      req: {
+        data: {},
+        route: "PENDING", // Router will set in exec
+        routeValue: "PENDING", // Adapter will set
+        transport: {
+          protocol: "unknown",
+          raw: null,
+        },
+      },
+      res: {
+        code: "OK",
+        msg: "OK",
+        data: {},
+      },
+      err: null,
+      user,
+      meta: {
+        serviceName: this.instance.SERVICE_NAME,
+        instance: {
+          id: this.instance.ID,
+          createdAt: this.instance.CREATED_AT,
+          seq: -1, // Set in exec()
+          inflight: -1, // Set in exec()
+          cpu: -1, // Set in exec()
+          mem: -1, // Set in exec()
+        },
+        ts: {
+          in: -1, // Set in exec()
+          clientIn: -1, // Set in exec()
+          out: -1,
+          execTime: -1,
+          owd: -1, // Set in exec()
+        },
+        monitor: {
+          traceId: "PENDING", // Set in exec()
+          spanId: "PENDING", // Set in exec()
+        },
+        log: {
+          stdout: [],
+          db: [],
+        },
+      },
+    };
+
+    return ctx as TContext;
   }
 
   async exec(ctx: TContext): Promise<TContext> {
-    return await execImpl(ctx, this.routes, this.hooks);
-  }
-
-  public end(ctx: TContext): void {
-    endImpl(ctx, this.instance);
+    return await execImpl(ctx, this.routes, this.hooks, this.instance);
   }
 
   handle(route: string, handler: (ctx: TContext) => Promise<TContext>) {
@@ -69,28 +123,28 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     });
   }
 
-  hookOnExecError(handler: THooks["onExecError"]) {
+  hookOnExecError(handler: THooks<TContext>["onExecError"]) {
     this.hooks.onExecError = handler;
   }
 
-  hookOnExecFinally(handler: THooks["onExecFinally"]) {
+  hookOnExecFinally(handler: THooks<TContext>["onExecFinally"]) {
     this.hooks.onExecFinally = handler;
   }
 
   // Handler lifecycle hook setters
-  hookOnHandlerBefore(handler: THooks["onHandlerBefore"]) {
+  hookOnHandlerBefore(handler: THooks<TContext>["onHandlerBefore"]) {
     this.hooks.onHandlerBefore = handler;
   }
 
-  hookOnHandlerAfter(handler: THooks["onHandlerAfter"]) {
+  hookOnHandlerAfter(handler: THooks<TContext>["onHandlerAfter"]) {
     this.hooks.onHandlerAfter = handler;
   }
 
-  hookOnHandlerError(handler: THooks["onHandlerError"]) {
+  hookOnHandlerError(handler: THooks<TContext>["onHandlerError"]) {
     this.hooks.onHandlerError = handler;
   }
 
-  hookOnHandlerFinally(handler: THooks["onHandlerFinally"]) {
+  hookOnHandlerFinally(handler: THooks<TContext>["onHandlerFinally"]) {
     this.hooks.onHandlerFinally = handler;
   }
 }

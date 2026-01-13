@@ -8,30 +8,24 @@ export type TRoute<TContext extends TDefaultCtx> = {
   handler: (ctx: TContext) => Promise<TContext>;
 };
 
-export type THooks = {
+export type THooks<TContext extends TDefaultCtx> = {
   // Exec lifecycle hooks (outer) - wraps routing + handler
-  onExecBefore<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
-  onExecAfter<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
-  onExecError<TContext extends TDefaultCtx>(
+  onExecBefore(ctx: TContext): Promise<TContext>;
+  onExecAfter(ctx: TContext): Promise<TContext>;
+  onExecError(
     ctx: TContext,
     error: CtxError | Error | unknown
   ): Promise<TContext>;
-  onExecFinally<TContext extends TDefaultCtx>(ctx: TContext): Promise<TContext>;
+  onExecFinally(ctx: TContext): Promise<TContext>;
 
   // Handler lifecycle hooks (inner) - wraps user's business logic
-  onHandlerBefore<TContext extends TDefaultCtx>(
-    ctx: TContext
-  ): Promise<TContext>;
-  onHandlerAfter<TContext extends TDefaultCtx>(
-    ctx: TContext
-  ): Promise<TContext>;
-  onHandlerError<TContext extends TDefaultCtx>(
+  onHandlerBefore(ctx: TContext): Promise<TContext>;
+  onHandlerAfter(ctx: TContext): Promise<TContext>;
+  onHandlerError(
     ctx: TContext,
     error: CtxError | Error | unknown
   ): Promise<TContext>;
-  onHandlerFinally<TContext extends TDefaultCtx>(
-    ctx: TContext
-  ): Promise<TContext>;
+  onHandlerFinally(ctx: TContext): Promise<TContext>;
 };
 
 export type LogLevel = "none" | "minimal" | "standard" | "verbose";
