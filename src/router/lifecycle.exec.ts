@@ -76,24 +76,62 @@ export async function exec<TContext extends TDefaultCtx>(
     // 1. EXEC BEFORE - Runs FIRST (context prep, before routing)
     await hooks.onExecBefore(ctx);
 
-    // 2. Route matching (router logic)
-    const routeOriginal = ctx.req.route.original;
-    const match = routes
-      .map((route) => ({
-        route,
-        result: route.matcher(routeOriginal),
-      }))
-      .find((m) => m.result !== false);
+    // 2. Route matching (protocol-aware with action precedence)
+    const protocol = ctx.req.transport?.protocol;
+    const action = ctx.req.route.action;
+    const hasAction = typeof action === "string" && action.length > 0;
+    const original = ctx.req.route.original;
 
-    if (!match || !match.result) {
+    // Find matching routes with protocol + action + pattern
+    let exactMatch: {
+      route: TRoute<TContext>;
+      result: { params: object };
+    } | null = null;
+    let wildcardMatch: {
+      route: TRoute<TContext>;
+      result: { params: object };
+    } | null = null;
+
+    for (const route of routes) {
+      // Protocol must match
+      if (route.protocol !== protocol) continue;
+
+      // Action matching rules:
+      // - If route has action, require ctx action to match exactly
+      // - If route has no action, it's a wildcard (matches any action)
+      if (route.action !== undefined) {
+        if (!hasAction || route.action !== action) continue;
+      }
+
+      // Pattern matching
+      const result = route.matcher(original);
+      if (result === false) continue;
+
+      if (route.action !== undefined) {
+        exactMatch = { route, result };
+        break; // Exact action match wins, preserve registration order
+      }
+
+      if (!wildcardMatch) {
+        wildcardMatch = { route, result };
+      }
+    }
+
+    const match = exactMatch || wildcardMatch;
+
+    if (!match) {
       throw new CtxError({
         name: "HANDLER_NOT_FOUND",
         msg: "Handler not found",
-        data: { routeOriginal },
+        data: {
+          protocol: protocol || "unknown",
+          action: hasAction ? action : "unknown",
+          original,
+        },
       });
     }
 
-    // Update route to matched pattern (e.g., "GET /user/:userId")
+    // Update route to matched pattern (e.g., "/user/:userId")
     ctx.req.route.pattern = match.route.pattern;
 
     // Set route params (router no longer merges into ctx.req.data)

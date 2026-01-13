@@ -68,12 +68,11 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       req: {
         data: {},
         route: {
-          protocol: "unknown",
-          action: "PENDING", // Adapter will set
           pattern: "PENDING", // Router will set in exec
           original: "PENDING", // Adapter will set
         },
         transport: {
+          protocol: "unknown", // Adapter will set
           raw: null,
         },
       },
@@ -125,13 +124,52 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     );
   }
 
-  handle(route: string, handler: (ctx: TContext) => Promise<TContext>) {
-    const matcher = pathMatch(route, { decode: decodeURIComponent });
-    this.routes.push({
-      pattern: route,
+  handle(config: {
+    protocol: string;
+    action?: string;
+    pattern: string;
+    handler: (ctx: TContext) => Promise<TContext>;
+  }) {
+    // Runtime validation
+    if (!config || typeof config !== "object") {
+      throw new Error(
+        "Router.handle() requires an object with { protocol, pattern, handler }"
+      );
+    }
+    if (
+      typeof config.protocol !== "string" ||
+      typeof config.pattern !== "string" ||
+      typeof config.handler !== "function" ||
+      config.protocol.length === 0 ||
+      config.pattern.length === 0
+    ) {
+      throw new Error(
+        "Router.handle() requires protocol, pattern, and handler fields"
+      );
+    }
+    if (config.action !== undefined) {
+      if (typeof config.action !== "string" || config.action.length === 0) {
+        throw new Error(
+          "Router.handle() action must be a non-empty string when provided"
+        );
+      }
+    }
+
+    // Create matcher and store route
+    const matcher = pathMatch(config.pattern, { decode: decodeURIComponent });
+    const route: TRoute<TContext> = {
+      protocol: config.protocol,
+      pattern: config.pattern,
       matcher,
-      handler,
-    });
+      handler: config.handler,
+    };
+
+    // Only add action if it's defined (exactOptionalPropertyTypes: true)
+    if (config.action !== undefined) {
+      route.action = config.action;
+    }
+
+    this.routes.push(route);
   }
 
   hookOnExecError(handler: THooks<TContext>["onExecError"]) {

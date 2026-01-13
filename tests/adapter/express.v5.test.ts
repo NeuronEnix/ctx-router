@@ -34,7 +34,7 @@ describe("enrichFromExpress", () => {
   });
 
   describe("route extraction", () => {
-    it("sets route pattern and original from method and path", () => {
+    it("sets route pattern and original as path-only", () => {
       const req = createMockRequest({
         method: "POST",
         url: "/api/users",
@@ -42,8 +42,8 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.route.original).toBe("POST /api/users");
-      expect(ctx.req.route.pattern).toBe("POST /api/users");
+      expect(ctx.req.route.original).toBe("/api/users");
+      expect(ctx.req.route.pattern).toBe("/api/users");
       expect(ctx.req.route.action).toBe("POST");
     });
 
@@ -55,7 +55,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.route.original).toBe("GET /search");
+      expect(ctx.req.route.original).toBe("/search");
     });
   });
 
@@ -136,12 +136,12 @@ describe("enrichFromExpress", () => {
   });
 
   describe("transport extraction", () => {
-    it("sets protocol to http", () => {
+    it("sets protocol to http in transport", () => {
       const req = createMockRequest();
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.route.protocol).toBe("http");
+      expect(ctx.req.transport.protocol).toBe("http");
     });
 
     it("sets request method and path", () => {

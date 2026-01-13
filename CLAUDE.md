@@ -51,7 +51,7 @@ pnpm format:staged  # Format staged files (used in pre-commit hook)
 
 - Unified context type that normalizes all transports
 - Structure: `{ id, req, res, user, meta, err }`
-- `req` contains: data, route, routeValue, params, auth, client, invocation, transport
+- `req` contains: data, route, params, auth, client, invocation, transport
 - `res` contains: code, msg, data, optional meta
 - `meta` tracks: service info, instance metrics, timing, monitoring (traceId/spanId), logs
 - Extend this type for your application's needs (e.g., custom user fields)
@@ -62,14 +62,7 @@ pnpm format:staged  # Format staged files (used in pre-commit hook)
 - Adapters enrich an existing context created by `router.createCtx()`
 - Additional adapters can be added for Lambda, gRPC, SQS, etc.
 - Adapters extract method, path, headers, body, auth into unified format
-
-**Route Utilities** (`src/router/route.ts`)
-
-- `buildRoute()` - Build canonical route strings that avoid `:` conflicts
-- `parseRoute()` - Parse canonical route strings into segments
-- `isCanonicalRoute()` - Validate route format
-- Format: `<protocol> <operation> [<path>]` (space-delimited)
-- Examples: `http GET /user/:id`, `sqs order.created`, `grpc CreateUser`
+- Adapters set protocol in transport, action/pattern/original in route
 
 ### Handler Pattern
 
@@ -143,7 +136,6 @@ src/
 │   ├── router.ts          # Main CtxRouter class
 │   ├── types.ts           # Type definitions (THooks, LogLevel, Config)
 │   ├── error.ts           # CtxError and ctxErrMap utilities
-│   ├── route.ts           # Canonical route utilities (buildRoute, parseRoute)
 │   ├── lifecycle.exec.ts  # Exec lifecycle implementation
 │   ├── instance.ts        # Router instance metrics
 │   └── index.ts           # Router exports
@@ -167,35 +159,54 @@ src/
 
 ## Implementation Guidelines
 
-### Using Canonical Route Format
+### Route Registration (Object-Based API)
 
-Use the `buildRoute()` helper to create transport-agnostic route strings:
+All routes are registered using the object form:
 
 ```typescript
-import { route } from "ctx-router";
+import { CtxRouter } from "ctx-router";
+
+const router = new CtxRouter();
 
 // HTTP routes
-const httpRoute = route.buildRoute("http", "GET", "/user/:id");
-router.handle(httpRoute, handler); // "http GET /user/:id"
+router.handle({
+  protocol: "http",
+  action: "GET", // HTTP method
+  pattern: "/user/:id", // Path-only pattern
+  handler: myHandler,
+});
 
-// Queue routes
-const sqsRoute = route.buildRoute("sqs", "order.created");
-router.handle(sqsRoute, handler); // "sqs order.created"
+// Queue/Event routes
+router.handle({
+  protocol: "sqs",
+  action: "order.created", // Event name
+  pattern: "order.queue", // Queue/topic identifier
+  handler: orderHandler,
+});
 
 // gRPC routes
-const grpcRoute = route.buildRoute("grpc", "CreateUser");
-router.handle(grpcRoute, handler); // "grpc CreateUser"
+router.handle({
+  protocol: "grpc",
+  action: "CreateUser", // gRPC method
+  pattern: "/UserService", // Service path
+  handler: grpcHandler,
+});
 
-// Parse routes back into segments
-const segments = route.parseRoute("http GET /user/:id");
-// => { protocol: "http", operation: "GET", path: "/user/:id" }
-
-// Validate route format
-route.isCanonicalRoute("http GET /user/:id"); // true
-route.isCanonicalRoute("/user/:id"); // false (legacy format)
+// Wildcard action (matches any action for this protocol+pattern)
+router.handle({
+  protocol: "http",
+  // action omitted = wildcard
+  pattern: "/webhook",
+  handler: webhookHandler,
+});
 ```
 
-**Note:** Legacy route formats (e.g., `GET /user/:id`) still work for HTTP but won't support multi-transport patterns.
+**Key Concepts:**
+
+- **protocol**: Transport identifier (http, grpc, sqs, kafka, etc.)
+- **action** (optional): HTTP method, gRPC operation, event name, etc.
+- **pattern**: Path or operation pattern (supports `:param` syntax)
+- **Precedence**: Routes with specific actions take precedence over wildcards
 
 ### Configuring Telemetry
 
@@ -227,22 +238,29 @@ export function enrichFromYourTransport(
   ctx: TDefaultCtx,
   input: YourTransportType
 ): void {
-  // Build route value
-  const routeValue = buildRouteValue(input);
+  // Extract action and path/operation from input
+  const action = extractAction(input); // e.g., method, event name, gRPC method
+  const path = extractPath(input); // e.g., "/user/123", "order.queue"
 
-  // Enrich ctx.req
+  // Enrich ctx.req with request data
   ctx.req.data = extractData(input);
-  ctx.req.routeValue = routeValue;
-  ctx.req.route = routeValue; // Router will reassign after matching
+  ctx.req.route = {
+    action, // Optional: HTTP method, event name, etc.
+    pattern: path, // Will be reassigned by router after matching
+    original: path, // Unchanged: concrete path/operation
+  };
 
   // Optional: set auth, client, invocation fields
   if (hasAuth(input)) {
     ctx.req.auth = extractAuth(input);
   }
 
-  // Set transport details
+  // Set transport details with protocol
   ctx.req.transport = {
-    protocol: "your-protocol",
+    protocol: "your-protocol", // Required: transport identifier
+    request: {
+      // Optional: protocol-specific details
+    },
     raw: input,
   };
 }
@@ -253,8 +271,17 @@ Export it from `src/index.ts` under the `adapter` namespace.
 ### Adding New Routes
 
 1. Create API handler file with `auth`, `validate`, `execute` functions
-2. Register in your router: `router.handle("METHOD", "/path", handler)`
-3. Path params (e.g., `/user/:userId`) are automatically merged into `ctx.req.data`
+2. Register in your router using object form:
+   ```typescript
+   router.handle({
+     protocol: "http",
+     action: "POST",
+     pattern: "/user/:userId",
+     handler: api.user.update,
+   });
+   ```
+3. Path params (e.g., `/user/:userId`) are automatically extracted into `ctx.req.params`
+4. Routes are matched by protocol first, then action (if specified), then pattern
 
 ### Role-Based Authorization
 

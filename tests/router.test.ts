@@ -4,15 +4,18 @@ import { TDefaultCtx } from "../src/core";
 
 function setRoute(
   ctx: TDefaultCtx,
-  route: string,
+  action: string,
+  path: string,
   protocol = "http"
 ): void {
-  const [action = "unknown"] = route.split(" ");
   ctx.req.route = {
-    protocol,
     action,
-    pattern: route,
-    original: route,
+    pattern: path,
+    original: path,
+  };
+  ctx.req.transport = {
+    protocol,
+    raw: null,
   };
 }
 
@@ -95,13 +98,18 @@ describe("CtxRouter", () => {
 
   describe("handle()", () => {
     it("registers a route handler", async () => {
-      router.handle("GET /test", async (ctx) => {
-        ctx.res.data = { success: true };
-        return ctx;
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/test",
+        handler: async (ctx) => {
+          ctx.res.data = { success: true };
+          return ctx;
+        },
       });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /test");
+      setRoute(ctx, "GET", "/test");
 
       await router.exec(ctx);
 
@@ -109,13 +117,18 @@ describe("CtxRouter", () => {
     });
 
     it("supports path parameters", async () => {
-      router.handle("GET /user/:userId", async (ctx) => {
-        ctx.res.data = { userId: ctx.req.params?.userId };
-        return ctx;
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/user/:userId",
+        handler: async (ctx) => {
+          ctx.res.data = { userId: ctx.req.params?.userId };
+          return ctx;
+        },
       });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /user/123");
+      setRoute(ctx, "GET", "/user/123");
 
       await router.exec(ctx);
 
@@ -127,7 +140,7 @@ describe("CtxRouter", () => {
   describe("exec()", () => {
     it("throws HANDLER_NOT_FOUND for unregistered route", async () => {
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /unknown");
+      setRoute(ctx, "GET", "/unknown");
 
       await router.exec(ctx);
 
@@ -135,13 +148,18 @@ describe("CtxRouter", () => {
     });
 
     it("executes matching handler", async () => {
-      router.handle("POST /data", async (ctx) => {
-        ctx.res.data = { received: true };
-        return ctx;
+      router.handle({
+        protocol: "http",
+        action: "POST",
+        pattern: "/data",
+        handler: async (ctx) => {
+          ctx.res.data = { received: true };
+          return ctx;
+        },
       });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "POST /data");
+      setRoute(ctx, "POST", "/data");
 
       await router.exec(ctx);
 
@@ -150,21 +168,31 @@ describe("CtxRouter", () => {
     });
 
     it("updates route to pattern after matching", async () => {
-      router.handle("GET /item/:id", async (ctx) => ctx);
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/item/:id",
+        handler: async (ctx) => ctx,
+      });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /item/456");
+      setRoute(ctx, "GET", "/item/456");
 
       await router.exec(ctx);
 
-      expect(ctx.req.route.pattern).toBe("GET /item/:id");
+      expect(ctx.req.route.pattern).toBe("/item/:id");
     });
 
     it("sets timing metadata after execution", async () => {
-      router.handle("GET /test", async (ctx) => ctx);
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/test",
+        handler: async (ctx) => ctx,
+      });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /test");
+      setRoute(ctx, "GET", "/test");
 
       await router.exec(ctx);
 
@@ -174,10 +202,15 @@ describe("CtxRouter", () => {
     });
 
     it("sets response meta after execution", async () => {
-      router.handle("GET /test", async (ctx) => ctx);
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/test",
+        handler: async (ctx) => ctx,
+      });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /test");
+      setRoute(ctx, "GET", "/test");
 
       await router.exec(ctx);
 
@@ -187,19 +220,150 @@ describe("CtxRouter", () => {
     });
 
     it("increments and decrements INFLIGHT during execution", async () => {
-      router.handle("GET /test", async (ctx) => {
-        expect(router.INSTANCE.INFLIGHT).toBe(1);
-        return ctx;
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/test",
+        handler: async (ctx) => {
+          expect(router.INSTANCE.INFLIGHT).toBe(1);
+          return ctx;
+        },
       });
 
       expect(router.INSTANCE.INFLIGHT).toBe(0);
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /test");
+      setRoute(ctx, "GET", "/test");
 
       await router.exec(ctx);
 
       expect(router.INSTANCE.INFLIGHT).toBe(0);
+    });
+
+    describe("protocol-aware routing", () => {
+      it("throws HANDLER_NOT_FOUND on protocol mismatch", async () => {
+        router.handle({
+          protocol: "http",
+          action: "GET",
+          pattern: "/test",
+          handler: async (ctx) => {
+            ctx.res.data = { protocol: "http" };
+            return ctx;
+          },
+        });
+
+        const ctx = router.createCtx();
+        setRoute(ctx, "GET", "/test", "grpc");
+
+        await router.exec(ctx);
+
+        expect(ctx.res.code).toBe("HANDLER_NOT_FOUND");
+      });
+
+      it("throws HANDLER_NOT_FOUND on action mismatch", async () => {
+        router.handle({
+          protocol: "http",
+          action: "GET",
+          pattern: "/test",
+          handler: async (ctx) => {
+            ctx.res.data = { action: "GET" };
+            return ctx;
+          },
+        });
+
+        const ctx = router.createCtx();
+        setRoute(ctx, "POST", "/test");
+
+        await router.exec(ctx);
+
+        expect(ctx.res.code).toBe("HANDLER_NOT_FOUND");
+      });
+
+      it("matches wildcard action when route has no action", async () => {
+        router.handle({
+          protocol: "http",
+          pattern: "/wildcard",
+          handler: async (ctx) => {
+            ctx.res.data = { wildcard: true };
+            return ctx;
+          },
+        });
+
+        const ctx = router.createCtx();
+        setRoute(ctx, "POST", "/wildcard");
+
+        await router.exec(ctx);
+
+        expect(ctx.res.code).toBe("OK");
+        expect(ctx.res.data).toEqual({ wildcard: true });
+      });
+
+      it("precedence: exact action wins over wildcard", async () => {
+        // Register wildcard first
+        router.handle({
+          protocol: "http",
+          pattern: "/item/:id",
+          handler: async (ctx) => {
+            ctx.res.data = { matched: "wildcard" };
+            return ctx;
+          },
+        });
+
+        // Register exact action second
+        router.handle({
+          protocol: "http",
+          action: "GET",
+          pattern: "/item/:id",
+          handler: async (ctx) => {
+            ctx.res.data = { matched: "exact" };
+            return ctx;
+          },
+        });
+
+        const ctx = router.createCtx();
+        setRoute(ctx, "GET", "/item/123");
+
+        await router.exec(ctx);
+
+        expect(ctx.res.code).toBe("OK");
+        expect(ctx.res.data).toEqual({ matched: "exact" });
+      });
+
+      it("supports mixed protocols with same pattern", async () => {
+        router.handle({
+          protocol: "http",
+          action: "GET",
+          pattern: "/data",
+          handler: async (ctx) => {
+            ctx.res.data = { protocol: "http" };
+            return ctx;
+          },
+        });
+
+        router.handle({
+          protocol: "grpc",
+          action: "GetData",
+          pattern: "/data",
+          handler: async (ctx) => {
+            ctx.res.data = { protocol: "grpc" };
+            return ctx;
+          },
+        });
+
+        const httpCtx = router.createCtx();
+        setRoute(httpCtx, "GET", "/data", "http");
+        await router.exec(httpCtx);
+
+        expect(httpCtx.res.code).toBe("OK");
+        expect(httpCtx.res.data).toEqual({ protocol: "http" });
+
+        const grpcCtx = router.createCtx();
+        setRoute(grpcCtx, "GetData", "/data", "grpc");
+        await router.exec(grpcCtx);
+
+        expect(grpcCtx.res.code).toBe("OK");
+        expect(grpcCtx.res.data).toEqual({ protocol: "grpc" });
+      });
     });
   });
 
@@ -212,10 +376,15 @@ describe("CtxRouter", () => {
         return ctx;
       });
 
-      router.handle("GET /test", async (ctx) => ctx);
+      router.handle({
+        protocol: "http",
+        action: "GET",
+        pattern: "/test",
+        handler: async (ctx) => ctx,
+      });
 
       const ctx = router.createCtx();
-      setRoute(ctx, "GET /test");
+      setRoute(ctx, "GET", "/test");
 
       await router.exec(ctx);
 
@@ -264,13 +433,18 @@ describe("CtxRouter", () => {
           logLevel: "none",
         });
 
-        noStatsRouter.handle("GET /test", async (ctx) => {
-          ctx.res.data = { success: true };
-          return ctx;
+        noStatsRouter.handle({
+          protocol: "http",
+          action: "GET",
+          pattern: "/test",
+          handler: async (ctx) => {
+            ctx.res.data = { success: true };
+            return ctx;
+          },
         });
 
         const ctx = noStatsRouter.createCtx();
-        setRoute(ctx, "GET /test");
+        setRoute(ctx, "GET", "/test");
 
         await noStatsRouter.exec(ctx);
 
@@ -287,10 +461,15 @@ describe("CtxRouter", () => {
           logLevel: "none",
         });
 
-        noStatsRouter.handle("GET /test", async (ctx) => ctx);
+        noStatsRouter.handle({
+          protocol: "http",
+          action: "GET",
+          pattern: "/test",
+          handler: async (ctx) => ctx,
+        });
 
         const ctx = noStatsRouter.createCtx();
-        setRoute(ctx, "GET /test");
+        setRoute(ctx, "GET", "/test");
 
         await noStatsRouter.exec(ctx);
 

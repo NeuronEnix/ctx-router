@@ -22,8 +22,25 @@ export const ctxErr = ctxErrMap({
 // Set your router
 const router = new CtxRouter<TCtx>();
 
-router.handle("GET /health/ping", api.health.ping);
-router.handle("POST /user/update", api.user.update);
-router.handle("GET /user/:userId", api.user.detail);
+router.handle({
+  protocol: "http",
+  action: "GET",
+  pattern: "/health/ping",
+  handler: api.health.ping,
+});
+
+router.handle({
+  protocol: "http",
+  action: "POST",
+  pattern: "/user/update",
+  handler: api.user.update,
+});
+
+router.handle({
+  protocol: "http",
+  action: "GET",
+  pattern: "/user/:userId",
+  handler: api.user.detail,
+});
 
 export { router };

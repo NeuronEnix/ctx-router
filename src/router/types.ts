@@ -3,6 +3,8 @@ import { TDefaultCtx } from "../core";
 import { CtxError } from "./error";
 
 export type TRoute<TContext extends TDefaultCtx> = {
+  protocol: string;
+  action?: string;
   pattern: string;
   matcher: MatchFunction<object>;
   handler: (ctx: TContext) => Promise<TContext>;

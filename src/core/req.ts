@@ -14,39 +14,28 @@ export type CtxReq<Data = Record<string, unknown>> = {
   params?: Record<string, string>;
 
   /**
-   * Route data (protocol + action + pattern).
-   * Adapter sets protocol/action/original.
+   * Route data (action + pattern).
+   * Adapter sets action/original (path-only for HTTP).
    * Router reassigns pattern after matching.
    */
   route: {
     /**
-     * Transport protocol identifier.
-     * Examples: "http", "grpc", "graphql", "lambda", "sqs", "kafka", "internal"
-     */
-    protocol:
-      | "http"
-      | "grpc"
-      | "graphql"
-      | "lambda"
-      | "sqs"
-      | "kafka"
-      | "internal"
-      | string;
-
-    /**
-     * Action or operation identifier.
+     * Action or operation identifier (optional).
      * Examples: "GET", "order.created", "CreateUser", "cleanup.run"
+     * For HTTP: method (GET, POST, etc.)
+     * For events: event name
+     * If undefined, routes without action act as wildcard matches.
      */
-    action: string;
+    action?: string;
 
     /**
      * Canonical route pattern (low-cardinality, first-class).
      * Examples:
-     * - "GET /users/:id"
-     * - "sqs order.created"
-     * - "internal cleanup.run"
+     * - HTTP: "/users/:id" (path-only, no method)
+     * - Event: "order.created"
+     * - Internal: "cleanup.run"
      *
-     * Adapter initially sets this to the raw path.
+     * Adapter initially sets this to the raw path/operation.
      * Router reassigns after finding matching pattern.
      */
     pattern: string;
@@ -54,10 +43,10 @@ export type CtxReq<Data = Record<string, unknown>> = {
     /**
      * Concrete route for this invocation (may be high-cardinality).
      * Examples:
-     * - "GET /users/123"
-     * - "sqs order.created"
+     * - HTTP: "/users/123" (path-only, no method)
+     * - Event: "order.created"
      *
-     * Adapter sets this to the raw path.
+     * Adapter sets this to the raw path/operation.
      * Remains unchanged after routing.
      */
     original: string;
@@ -105,6 +94,20 @@ export type CtxReq<Data = Record<string, unknown>> = {
    * Not intended for business logic.
    */
   transport?: {
+    /**
+     * Transport protocol identifier (source-of-truth).
+     * Examples: "http", "grpc", "graphql", "lambda", "sqs", "kafka", "internal"
+     */
+    protocol?:
+      | "http"
+      | "grpc"
+      | "graphql"
+      | "lambda"
+      | "sqs"
+      | "kafka"
+      | "internal"
+      | string;
+
     /**
      * Protocol-level addressing or operation info.
      */
