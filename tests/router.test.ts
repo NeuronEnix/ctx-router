@@ -100,7 +100,7 @@ describe("CtxRouter", () => {
 
     it("sets output timestamp", () => {
       const ctx = router.begin();
-      expect(ctx.meta.ts.out).toBe(0);
+      expect(ctx.meta.ts.out).toBe(-1);
 
       router.end(ctx);
       expect(ctx.meta.ts.out).toBeGreaterThan(0);
