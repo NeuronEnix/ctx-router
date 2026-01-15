@@ -133,7 +133,14 @@ The router automatically chains them: `auth → validate → execute`
 
 ```typescript
 import * as product from "./api/product";
-router.handle("POST", "/product", product.create);
+router.handle(
+  {
+    protocol: "http",
+    action: "POST",
+    pattern: "/product",
+  },
+  product.create
+);
 ```
 
 ## Testing with curl

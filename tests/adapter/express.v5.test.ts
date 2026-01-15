@@ -42,9 +42,9 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.route.original).toBe("/api/users");
-      expect(ctx.req.route.pattern).toBe("/api/users");
-      expect(ctx.req.route.action).toBe("POST");
+      expect(ctx.req.route.raw).toBe("/api/users");
+      expect(ctx.req.route.pattern).toBe("PENDING");
+      expect(ctx.req.route.op).toBe("POST");
     });
 
     it("strips query params from path", () => {
@@ -55,7 +55,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.route.original).toBe("/search");
+      expect(ctx.req.route.raw).toBe("/search");
     });
   });
 

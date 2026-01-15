@@ -90,9 +90,9 @@ export function enrichFromExpress(
   // Enrich ctx.req
   ctx.req.data = { ...req.body, ...req.query, ...req.params };
   ctx.req.route = {
-    action: method,
-    pattern: path, // Router will reassign to pattern after matching
-    original: path,
+    op: method, // HTTP method (GET, POST, etc.)
+    raw: path, // Concrete path with "/" separator
+    pattern: "PENDING", // Router will set after matching
   };
 
   if (Object.keys(auth).length > 0) ctx.req.auth = auth;

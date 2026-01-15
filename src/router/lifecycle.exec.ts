@@ -1,4 +1,4 @@
-import { TRoute, THooks } from "./types";
+import { THooks } from "./types";
 import { CtxError } from "./error";
 import { TDefaultCtx } from "../core";
 import { updateStatsIfStale } from "../common/helper";
@@ -9,13 +9,14 @@ import {
   decrementInflight,
 } from "./instance";
 import { STATS } from "../common/const";
+import type { CtxRouter } from "./router";
 
 /**
  * Executes a route handler with full lifecycle hooks.
  * Integrates begin/end logic internally for safe lifecycle management.
  *
  * @param ctx - The context to execute (created via createCtx())
- * @param routes - Array of registered routes
+ * @param router - Router instance with route storage
  * @param hooks - Hook functions to run during execution
  * @param instance - Router instance for metrics
  * @param statsEnabled - Whether to update CPU/memory stats (default: true)
@@ -23,7 +24,7 @@ import { STATS } from "../common/const";
  */
 export async function exec<TContext extends TDefaultCtx>(
   ctx: TContext,
-  routes: TRoute<TContext>[],
+  router: CtxRouter<TContext>,
   hooks: THooks<TContext>,
   instance: TRouterInstance,
   statsEnabled = true
@@ -76,89 +77,94 @@ export async function exec<TContext extends TDefaultCtx>(
     // 1. EXEC BEFORE - Runs FIRST (context prep, before routing)
     await hooks.onExecBefore(ctx);
 
-    // 2. Route matching (protocol-aware with action precedence)
-    const protocol = ctx.req.transport?.protocol;
-    const action = ctx.req.route.action;
-    const hasAction = typeof action === "string" && action.length > 0;
-    const original = ctx.req.route.original;
+    // 2. Route matching (protocol-agnostic, op + pattern based)
+    const { op, raw } = ctx.req.route;
+    const rawKey = op ? `${op} ${raw}` : raw; // For error messages
 
-    // Find matching routes with protocol + action + pattern
-    let exactMatch: {
-      route: TRoute<TContext>;
-      result: { params: object };
-    } | null = null;
-    let wildcardMatch: {
-      route: TRoute<TContext>;
-      result: { params: object };
-    } | null = null;
+    // Try exact match first (O(1))
+    const exactKey = op ? `${op}:${raw}` : `:${raw}`;
+    const exactMatch = router.exactRoutes.get(exactKey);
 
-    for (const route of routes) {
-      // Protocol must match
-      if (route.protocol !== protocol) continue;
+    if (exactMatch) {
+      // Exact match found - populate context and execute
+      ctx.req.params = {}; // No params in exact match
+      ctx.req.route.pattern = exactMatch.route.pattern;
 
-      // Action matching rules:
-      // - If route has action, require ctx action to match exactly
-      // - If route has no action, it's a wildcard (matches any action)
-      if (route.action !== undefined) {
-        if (!hasAction || route.action !== action) continue;
+      // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
+      try {
+        // 3. HANDLER BEFORE
+        await hooks.onHandlerBefore(ctx);
+
+        // 4. USER'S BUSINESS LOGIC
+        const result = await exactMatch.route.handler(ctx);
+
+        // 5. HANDLER AFTER (success)
+        await hooks.onHandlerAfter(result);
+        ctx = result;
+      } catch (handlerError) {
+        // 6. HANDLER ERROR (handler-specific errors)
+        ctx = await hooks.onHandlerError(ctx, handlerError);
+      } finally {
+        // 7. HANDLER FINALLY (always runs after handler)
+        await hooks.onHandlerFinally(ctx);
       }
 
-      // Pattern matching
-      const result = route.matcher(original);
+      // 8. EXEC AFTER - Runs at end of try block (after handler completes)
+      await hooks.onExecAfter(ctx);
+      return ctx;
+    }
+
+    // Try param pattern matches (regex)
+    for (const entry of router.paramRoutes) {
+      const route = entry.route;
+
+      // 1. Check op (if route has op, context must match)
+      if (route.op !== undefined) {
+        if (!op || route.op !== op) continue;
+      }
+
+      // 2. Try pattern match
+      const result = route.matcher(raw);
       if (result === false) continue;
 
-      if (route.action !== undefined) {
-        exactMatch = { route, result };
-        break; // Exact action match wins, preserve registration order
+      // Match found - populate context and execute
+      ctx.req.params = result.params as Record<string, string>;
+      ctx.req.route.pattern = route.pattern;
+
+      // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
+      try {
+        // 3. HANDLER BEFORE
+        await hooks.onHandlerBefore(ctx);
+
+        // 4. USER'S BUSINESS LOGIC
+        const handlerResult = await route.handler(ctx);
+
+        // 5. HANDLER AFTER (success)
+        await hooks.onHandlerAfter(handlerResult);
+        ctx = handlerResult;
+      } catch (handlerError) {
+        // 6. HANDLER ERROR (handler-specific errors)
+        ctx = await hooks.onHandlerError(ctx, handlerError);
+      } finally {
+        // 7. HANDLER FINALLY (always runs after handler)
+        await hooks.onHandlerFinally(ctx);
       }
 
-      if (!wildcardMatch) {
-        wildcardMatch = { route, result };
-      }
+      // 8. EXEC AFTER - Runs at end of try block (after handler completes)
+      await hooks.onExecAfter(ctx);
+      return ctx;
     }
 
-    const match = exactMatch || wildcardMatch;
-
-    if (!match) {
-      throw new CtxError({
-        name: "HANDLER_NOT_FOUND",
-        msg: "Handler not found",
-        data: {
-          protocol: protocol || "unknown",
-          action: hasAction ? action : "unknown",
-          original,
-        },
-      });
-    }
-
-    // Update route to matched pattern (e.g., "/user/:userId")
-    ctx.req.route.pattern = match.route.pattern;
-
-    // Set route params (router no longer merges into ctx.req.data)
-    ctx.req.params = match.result.params as Record<string, string>;
-
-    // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
-    try {
-      // 3. HANDLER BEFORE
-      await hooks.onHandlerBefore(ctx);
-
-      // 4. USER'S BUSINESS LOGIC
-      const result = await match.route.handler(ctx);
-
-      // 5. HANDLER AFTER (success)
-      await hooks.onHandlerAfter(result);
-      ctx = result;
-    } catch (handlerError) {
-      // 6. HANDLER ERROR (handler-specific errors)
-      ctx = await hooks.onHandlerError(ctx, handlerError);
-    } finally {
-      // 7. HANDLER FINALLY (always runs after handler)
-      await hooks.onHandlerFinally(ctx);
-    }
-
-    // 8. EXEC AFTER - Runs at end of try block (after handler completes)
-    await hooks.onExecAfter(ctx);
-    return ctx;
+    // No match found
+    throw new CtxError({
+      name: "HANDLER_NOT_FOUND",
+      msg: "Handler not found",
+      data: {
+        route: rawKey,
+        op: op || "none",
+        raw,
+      },
+    });
   } catch (execError) {
     // 9. EXEC ERROR - Catches routing errors, HANDLER_NOT_FOUND, or re-thrown errors
     ctx = await hooks.onExecError(ctx, execError);

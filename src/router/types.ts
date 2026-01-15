@@ -3,11 +3,16 @@ import { TDefaultCtx } from "../core";
 import { CtxError } from "./error";
 
 export type TRoute<TContext extends TDefaultCtx> = {
-  protocol: string;
-  action?: string;
-  pattern: string;
-  matcher: MatchFunction<object>;
+  op?: string; // Optional: HTTP method, event name, etc.
+  pattern: string; // Pattern with :params (identity)
+  separator: "." | "/"; // Track separator for logging/debugging
+  matcher: MatchFunction<object>; // Compiled regex from path-to-regexp
   handler: (ctx: TContext) => Promise<TContext>;
+};
+
+export type TRouteEntry<TContext extends TDefaultCtx> = {
+  route: TRoute<TContext>;
+  segments: string[]; // Track original segments for logging
 };
 
 export type THooks<TContext extends TDefaultCtx> = {

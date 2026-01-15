@@ -1,4 +1,9 @@
-import { CtxRouter, TDefaultCtx, ctxErrMap, DEFAULT_USER_ROLE } from "ctx-router";
+import {
+  CtxRouter,
+  TDefaultCtx,
+  ctxErrMap,
+  DEFAULT_USER_ROLE,
+} from "../../../src";
 import * as api from "./api/index";
 
 export type TCtx = TDefaultCtx & {
@@ -22,25 +27,12 @@ export const ctxErr = ctxErrMap({
 // Set your router
 const router = new CtxRouter<TCtx>();
 
-router.handle({
-  protocol: "http",
-  action: "GET",
-  pattern: "/health/ping",
-  handler: api.health.ping,
-});
+// Health routes
+router.on("GET /health/ping").handle(api.health.ping);
 
-router.handle({
-  protocol: "http",
-  action: "POST",
-  pattern: "/user/update",
-  handler: api.user.update,
-});
-
-router.handle({
-  protocol: "http",
-  action: "GET",
-  pattern: "/user/:userId",
-  handler: api.user.detail,
-});
+// User routes
+const userRouter = router.on("user");
+userRouter.on("POST /update").handle(api.user.update);
+userRouter.on("GET /:userId").handle(api.user.detail);
 
 export { router };

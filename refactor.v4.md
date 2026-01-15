@@ -5,7 +5,7 @@
 | task                      | what it does                                                                                    | status                                 | ask test                         |
 | ------------------------- | ----------------------------------------------------------------------------------------------- | -------------------------------------- | -------------------------------- |
 | Define new route contract | Move protocol back to transport, route -> `{ action?, pattern, original }`, remove `routeValue` | <span style="color:red">PENDING</span> | <span style="color:red">x</span> |
-| Object-only route API     | `router.handle` accepts only `{ protocol, action?, pattern, handler }` with runtime validation  | <span style="color:red">PENDING</span> | <span style="color:red">x</span> |
+| Object-only route API     | `router.handle(config, handler)` with `{ protocol, action?, pattern }`                          | <span style="color:red">PENDING</span> | <span style="color:red">x</span> |
 | Matching rules            | Define action-required rules, wildcard behavior, and precedence                                 | <span style="color:red">PENDING</span> | <span style="color:red">x</span> |
 | Adapter updates           | Express adapter sets protocol in transport and action in route                                  | <span style="color:red">PENDING</span> | <span style="color:red">x</span> |
 | Hooks/logging             | Log path-only pattern/original, method from action if needed                                    | <span style="color:red">PENDING</span> | <span style="color:red">x</span> |
@@ -46,7 +46,7 @@ Object-only route registration avoids delimiter/spacing issues, keeps log querie
 - HTTP sets `route.action = method`, `route.pattern = "/path/:id"`, `route.original = "/path/123"`.
 - Non-HTTP may omit `action` or set it to an operation/event name.
 - Router registration is object-only:
-  - `router.handle({ protocol, action?, pattern, handler })`.
+  - `router.handle({ protocol, action?, pattern }, handler)`.
 
 ## Detailed Plan
 
@@ -60,7 +60,7 @@ Object-only route registration avoids delimiter/spacing issues, keeps log querie
 2. Change route registration API (breaking)
 
 - In `src/router/types.ts`, update `TRoute` to store `{ protocol, action?, pattern, matcher, handler }`.
-- In `src/router/router.ts`, change `handle()` to accept only `{ protocol, action?, pattern, handler }`.
+- In `src/router/router.ts`, change `handle()` to accept `{ protocol, action?, pattern }` and a separate handler argument.
 - Add runtime validation: if input is not an object or missing required fields, throw a clear error.
 - Remove string parsing or legacy overloads entirely.
 

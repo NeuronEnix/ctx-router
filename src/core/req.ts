@@ -14,42 +14,44 @@ export type CtxReq<Data = Record<string, unknown>> = {
   params?: Record<string, string>;
 
   /**
-   * Route data (action + pattern).
-   * Adapter sets action/original (path-only for HTTP).
+   * Route data (op + raw + pattern).
+   * Adapter sets op/raw (concrete values for this invocation).
    * Router reassigns pattern after matching.
    */
   route: {
     /**
-     * Action or operation identifier (optional).
-     * Examples: "GET", "order.created", "CreateUser", "cleanup.run"
-     * For HTTP: method (GET, POST, etc.)
-     * For events: event name
-     * If undefined, routes without action act as wildcard matches.
+     * Operation identifier (optional).
+     * Examples: "GET", "POST", "order.created", "CreateUser"
+     * - For HTTP: method (GET, POST, etc.)
+     * - For events: event name
+     * - For gRPC: RPC method name
+     * If undefined, routes without op act as wildcard matches.
      */
-    action?: string;
+    op?: string;
 
     /**
-     * Canonical route pattern (low-cardinality, first-class).
+     * Concrete route value for this invocation (high-cardinality).
      * Examples:
-     * - HTTP: "/users/:id" (path-only, no method)
-     * - Event: "order.created"
-     * - Internal: "cleanup.run"
+     * - HTTP: "/users/123" (uses "/" separator)
+     * - Event: "order.abc.created" (uses "." separator)
+     * - gRPC: "pkg.Service.Method" (uses "." separator)
      *
-     * Adapter initially sets this to the raw path/operation.
-     * Router reassigns after finding matching pattern.
-     */
-    pattern: string;
-
-    /**
-     * Concrete route for this invocation (may be high-cardinality).
-     * Examples:
-     * - HTTP: "/users/123" (path-only, no method)
-     * - Event: "order.created"
-     *
-     * Adapter sets this to the raw path/operation.
+     * Adapter sets this to the concrete path/operation.
      * Remains unchanged after routing.
      */
-    original: string;
+    raw: string;
+
+    /**
+     * Matched route pattern (low-cardinality, identity).
+     * Examples:
+     * - HTTP: "/users/:id"
+     * - Event: "order.:id.created"
+     * - gRPC: "pkg.Service.:method"
+     *
+     * Initially set to "PENDING" by createCtx().
+     * Router reassigns to matched pattern after route matching.
+     */
+    pattern: string;
   };
 
   /**

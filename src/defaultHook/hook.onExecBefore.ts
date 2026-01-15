@@ -18,11 +18,11 @@ export function defaultHookOnExecBefore<TContext extends TDefaultCtx>(
     const userId = ctx.user.id;
     const instanceSeq = ctx.meta.instance.seq;
     const inflight = ctx.meta.instance.inflight;
-    const routeOriginal = ctx.req.route.original;
+    const routeRaw = ctx.req.route.raw;
 
     if (logLevel === "standard") {
       console.log(
-        `[${pattern} -> ${routeOriginal}] TraceId: ${traceId} | UserId: ${userId} | Seq: ${instanceSeq} | Inflight: ${inflight}`
+        `[${pattern} -> ${routeRaw}] TraceId: ${traceId} | UserId: ${userId} | Seq: ${instanceSeq} | Inflight: ${inflight}`
       );
       return ctx;
     }
@@ -34,7 +34,7 @@ export function defaultHookOnExecBefore<TContext extends TDefaultCtx>(
     const reqData = JSON.stringify(ctx.req.data);
 
     console.log(
-      `[${pattern} -> ${routeOriginal}] IP: ${ip} | TraceId: ${traceId} | SpanId: ${spanId} | UserId: ${userId} | UserSeq: ${userSeq} | Seq: ${instanceSeq} | Inflight: ${inflight} | Data: ${reqData}`
+      `[${pattern} -> ${routeRaw}] IP: ${ip} | TraceId: ${traceId} | SpanId: ${spanId} | UserId: ${userId} | UserSeq: ${userSeq} | Seq: ${instanceSeq} | Inflight: ${inflight} | Data: ${reqData}`
     );
     return ctx;
   };

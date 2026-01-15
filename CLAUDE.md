@@ -161,7 +161,7 @@ src/
 
 ### Route Registration (Object-Based API)
 
-All routes are registered using the object form:
+All routes are registered using the object form with the handler as the second argument:
 
 ```typescript
 import { CtxRouter } from "ctx-router";
@@ -169,36 +169,44 @@ import { CtxRouter } from "ctx-router";
 const router = new CtxRouter();
 
 // HTTP routes
-router.handle({
-  protocol: "http",
-  action: "GET", // HTTP method
-  pattern: "/user/:id", // Path-only pattern
-  handler: myHandler,
-});
+router.handle(
+  {
+    protocol: "http",
+    action: "GET", // HTTP method
+    pattern: "/user/:id", // Path-only pattern
+  },
+  myHandler
+);
 
 // Queue/Event routes
-router.handle({
-  protocol: "sqs",
-  action: "order.created", // Event name
-  pattern: "order.queue", // Queue/topic identifier
-  handler: orderHandler,
-});
+router.handle(
+  {
+    protocol: "sqs",
+    action: "order.created", // Event name
+    pattern: "order.queue", // Queue/topic identifier
+  },
+  orderHandler
+);
 
 // gRPC routes
-router.handle({
-  protocol: "grpc",
-  action: "CreateUser", // gRPC method
-  pattern: "/UserService", // Service path
-  handler: grpcHandler,
-});
+router.handle(
+  {
+    protocol: "grpc",
+    action: "CreateUser", // gRPC method
+    pattern: "/UserService", // Service path
+  },
+  grpcHandler
+);
 
 // Wildcard action (matches any action for this protocol+pattern)
-router.handle({
-  protocol: "http",
-  // action omitted = wildcard
-  pattern: "/webhook",
-  handler: webhookHandler,
-});
+router.handle(
+  {
+    protocol: "http",
+    // action omitted = wildcard
+    pattern: "/webhook",
+  },
+  webhookHandler
+);
 ```
 
 **Key Concepts:**
@@ -273,12 +281,14 @@ Export it from `src/index.ts` under the `adapter` namespace.
 1. Create API handler file with `auth`, `validate`, `execute` functions
 2. Register in your router using object form:
    ```typescript
-   router.handle({
-     protocol: "http",
-     action: "POST",
-     pattern: "/user/:userId",
-     handler: api.user.update,
-   });
+   router.handle(
+     {
+       protocol: "http",
+       action: "POST",
+       pattern: "/user/:userId",
+     },
+     api.user.update
+   );
    ```
 3. Path params (e.g., `/user/:userId`) are automatically extracted into `ctx.req.params`
 4. Routes are matched by protocol first, then action (if specified), then pattern

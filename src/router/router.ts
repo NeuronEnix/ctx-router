@@ -2,12 +2,24 @@ import { match as pathMatch } from "path-to-regexp";
 import { defaultHookOnExecBefore } from "../defaultHook/hook.onExecBefore";
 import { defaultHookOnExecError } from "../defaultHook/hook.onExecError";
 import { TDefaultCtx } from "../core";
-import { TRoute, THooks, LogLevel, CtxRouterConfig } from "./types";
+import {
+  TRoute,
+  TRouteEntry,
+  THooks,
+  LogLevel,
+  CtxRouterConfig,
+} from "./types";
 import { TRouterInstance, createRouterInstance } from "./instance";
 import { exec as execImpl } from "./lifecycle.exec";
 
 export class CtxRouter<TContext extends TDefaultCtx> {
-  private routes: TRoute<TContext>[] = [];
+  // Segment tracking for scoped router
+  private segments: string[] = [];
+
+  // Route storage: exact matches (O(1)) and param routes (regex)
+  public exactRoutes = new Map<string, TRouteEntry<TContext>>();
+  public paramRoutes: TRouteEntry<TContext>[] = [];
+
   private hooks: THooks<TContext>;
   public logLevel: LogLevel;
   public statsEnabled: boolean;
@@ -52,7 +64,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    * Does NOT increment inflight or set timing - that happens in exec().
    * Adapters should enrich the returned context before calling exec().
    */
-  public createCtx(): TContext {
+  public createCtx(protocol?: string): TContext {
     // Build default user (anonymous)
     const user = {
       kind: "user" as const,
@@ -68,11 +80,12 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       req: {
         data: {},
         route: {
+          // op: undefined,  // Adapter will set - omit to satisfy exactOptionalPropertyTypes
+          raw: "PENDING", // Adapter will set
           pattern: "PENDING", // Router will set in exec
-          original: "PENDING", // Adapter will set
-        },
+        } as TDefaultCtx["req"]["route"],
         transport: {
-          protocol: "unknown", // Adapter will set
+          protocol: protocol || "unknown", // For logging only
           raw: null,
         },
       },
@@ -117,59 +130,196 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   async exec(ctx: TContext): Promise<TContext> {
     return await execImpl(
       ctx,
-      this.routes,
+      this, // Pass router instance instead of routes array
       this.hooks,
       this.instance,
       this.statsEnabled
     );
   }
 
-  handle(config: {
-    protocol: string;
-    action?: string;
-    pattern: string;
-    handler: (ctx: TContext) => Promise<TContext>;
-  }) {
-    // Runtime validation
-    if (!config || typeof config !== "object") {
+  /**
+   * Creates a scoped router with an additional segment prefix.
+   * Returns a new router instance that shares storage with the parent.
+   */
+  public on(segment: string): CtxRouter<TContext> {
+    if (typeof segment !== "string" || segment.length === 0) {
+      throw new Error("Router.on() requires a non-empty string segment");
+    }
+
+    // Create new scoped router with accumulated segments
+    const scoped = new CtxRouter<TContext>({
+      logLevel: this.logLevel,
+      statsEnabled: this.statsEnabled,
+    });
+
+    // Copy segment chain
+    scoped.segments = [...this.segments, segment];
+
+    // Share storage (routes registered on any scope go to same storage)
+    scoped.exactRoutes = this.exactRoutes;
+    scoped.paramRoutes = this.paramRoutes;
+
+    // Share hooks
+    scoped.hooks = this.hooks;
+
+    return scoped;
+  }
+
+  /**
+   * Registers a handler for the accumulated segment prefix.
+   * Analyzes segments for HTTP grammar and creates appropriate routes.
+   */
+  public handle(handler: (ctx: TContext) => Promise<TContext>): void {
+    if (typeof handler !== "function") {
+      throw new Error("Router.handle() requires a handler function");
+    }
+
+    if (this.segments.length === 0) {
       throw new Error(
-        "Router.handle() requires an object with { protocol, pattern, handler }"
+        "Cannot register handler without segments. Use .on(segment) first."
       );
     }
-    if (
-      typeof config.protocol !== "string" ||
-      typeof config.pattern !== "string" ||
-      typeof config.handler !== "function" ||
-      config.protocol.length === 0 ||
-      config.pattern.length === 0
-    ) {
-      throw new Error(
-        "Router.handle() requires protocol, pattern, and handler fields"
-      );
+
+    // 1. Detect HTTP grammar and build patterns
+    const { hasHttp, httpOp, nonHttpSegments } = this.analyzeSegments(
+      this.segments
+    );
+
+    // 2. Build primary pattern (always) - uses "." separator
+    const pattern = this.buildPattern(nonHttpSegments, false);
+    const matcher = pathMatch(pattern, { decode: decodeURIComponent });
+
+    // 3. Register primary pattern route
+    const route: TRoute<TContext> = {
+      pattern,
+      separator: ".",
+      matcher,
+      handler,
+    } as TRoute<TContext>;
+
+    // Only add op if HTTP grammar is present
+    if (hasHttp && httpOp) {
+      route.op = httpOp;
     }
-    if (config.action !== undefined) {
-      if (typeof config.action !== "string" || config.action.length === 0) {
-        throw new Error(
-          "Router.handle() action must be a non-empty string when provided"
+
+    this.registerRoute(route, this.segments);
+
+    // 4. If HTTP grammar detected, register HTTP route too (uses "/" separator)
+    if (hasHttp && httpOp) {
+      const httpPattern = this.buildHttpPattern(nonHttpSegments);
+      const httpMatcher = pathMatch(httpPattern, {
+        decode: decodeURIComponent,
+      });
+
+      const httpRoute: TRoute<TContext> = {
+        op: httpOp,
+        pattern: httpPattern,
+        separator: "/",
+        matcher: httpMatcher,
+        handler,
+      };
+
+      this.registerRoute(httpRoute, this.segments);
+    }
+  }
+
+  /**
+   * Analyzes segments to detect HTTP grammar (method keywords).
+   * Returns HTTP method, flag, and non-HTTP segments.
+   */
+  private analyzeSegments(segments: string[]): {
+    hasHttp: boolean;
+    httpOp?: string;
+    nonHttpSegments: string[];
+  } {
+    const httpMethods = [
+      "GET",
+      "POST",
+      "PUT",
+      "DELETE",
+      "PATCH",
+      "HEAD",
+      "OPTIONS",
+    ];
+    const httpSegments: string[] = [];
+    const nonHttpSegments: string[] = [];
+
+    for (const seg of segments) {
+      // Check if segment contains HTTP grammar
+      const parts = seg.split(/\s+/);
+      const hasMethod = parts.some((p) =>
+        httpMethods.includes(p.toUpperCase())
+      );
+
+      if (hasMethod) {
+        httpSegments.push(
+          ...parts.filter((p) => httpMethods.includes(p.toUpperCase()))
         );
+        // Strip leading slashes from path segments when HTTP grammar is present
+        const pathParts = parts
+          .filter((p) => !httpMethods.includes(p.toUpperCase()))
+          .map((p) => (p.startsWith("/") ? p.substring(1) : p))
+          .filter((p) => p.length > 0);
+        nonHttpSegments.push(...pathParts);
+      } else {
+        nonHttpSegments.push(seg);
       }
     }
 
-    // Create matcher and store route
-    const matcher = pathMatch(config.pattern, { decode: decodeURIComponent });
-    const route: TRoute<TContext> = {
-      protocol: config.protocol,
-      pattern: config.pattern,
-      matcher,
-      handler: config.handler,
+    const result: {
+      hasHttp: boolean;
+      httpOp?: string;
+      nonHttpSegments: string[];
+    } = {
+      hasHttp: httpSegments.length > 0,
+      nonHttpSegments,
     };
 
-    // Only add action if it's defined (exactOptionalPropertyTypes: true)
-    if (config.action !== undefined) {
-      route.action = config.action;
+    // Only add httpOp if it exists
+    if (httpSegments[0]) {
+      result.httpOp = httpSegments[0];
     }
 
-    this.routes.push(route);
+    return result;
+  }
+
+  /**
+   * Builds a pattern from segments using specified separator.
+   */
+  private buildPattern(segments: string[], isHttp: boolean): string {
+    const separator = isHttp ? "/" : ".";
+    return segments.join(separator);
+  }
+
+  /**
+   * Builds an HTTP pattern with leading slash.
+   */
+  private buildHttpPattern(segments: string[]): string {
+    const pattern = this.buildPattern(segments, true);
+    return pattern.startsWith("/") ? pattern : `/${pattern}`;
+  }
+
+  /**
+   * Registers a route in either exact or param storage.
+   */
+  private registerRoute(route: TRoute<TContext>, segments: string[]): void {
+    const entry: TRouteEntry<TContext> = { route, segments };
+
+    // Check if pattern has params
+    const hasParams = route.pattern.includes(":");
+
+    if (hasParams) {
+      // Store in paramRoutes array for regex matching
+      this.paramRoutes.push(entry);
+    } else {
+      // Store in exactRoutes map for O(1) lookup
+      // Key format: "op:pattern" or ":pattern" (if no op)
+      const key = route.op
+        ? `${route.op}:${route.pattern}`
+        : `:${route.pattern}`;
+
+      this.exactRoutes.set(key, entry);
+    }
   }
 
   hookOnExecError(handler: THooks<TContext>["onExecError"]) {

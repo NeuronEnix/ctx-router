@@ -88,24 +88,30 @@ export type TCtx = TDefaultCtx & {
 export const router = new CtxRouter<TCtx>();
 
 // Define routes once
-router.handle({
-  protocol: "http",
-  action: "GET",
-  pattern: "/health/ping",
-  handler: api.health.ping,
-});
-router.handle({
-  protocol: "http",
-  action: "POST",
-  pattern: "/user/update",
-  handler: api.user.update,
-});
-router.handle({
-  protocol: "http",
-  action: "GET",
-  pattern: "/user/:id",
-  handler: api.user.detail,
-});
+router.handle(
+  {
+    protocol: "http",
+    action: "GET",
+    pattern: "/health/ping",
+  },
+  api.health.ping
+);
+router.handle(
+  {
+    protocol: "http",
+    action: "POST",
+    pattern: "/user/update",
+  },
+  api.user.update
+);
+router.handle(
+  {
+    protocol: "http",
+    action: "GET",
+    pattern: "/user/:id",
+  },
+  api.user.detail
+);
 
 // Global error handler
 router.onError(async (ctx, error) => {
@@ -396,7 +402,7 @@ new CtxRouter<TCtx>(options?: {
 
 #### Methods
 
-- `handle(config: { protocol: string; action?: string; pattern: string; handler: IBaseApi<TCtx> })` - Register a route
+- `handle(config: { protocol: string; action?: string; pattern: string }, handler: IBaseApi<TCtx>)` - Register a route
 - `exec(ctx: TCtx): Promise<TCtx>` - Execute a route
 - `hookBeforeExec(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called before route execution
 - `hookAfterExec(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called after successful execution

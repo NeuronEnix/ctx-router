@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import { adapter } from "ctx-router";
+import { adapter } from "../../../src";
 import { router, TCtx } from "./router";
 
 const app = express();
@@ -12,7 +12,7 @@ app.use(express.urlencoded({ extended: true }));
 router.hookOnExecBefore(async (ctx) => {
   // Demonstrate hook functionality by logging
   console.log(
-    `[onExecBefore] Processing request ${ctx.id} - ${ctx.req.route.original}`
+    `[onExecBefore] Processing request ${ctx.id} - ${ctx.req.route.raw}`
   );
   return ctx;
 });
@@ -30,7 +30,7 @@ app.use(async (req: Request, res: Response) => {
 
   // 2. Enrich context with Express request data
   adapter.enrichFromExpress(ctx, req, res);
-  console.log(`[2. Enriched] RouteOriginal: ${ctx.req.route.original}`);
+  console.log(`[2. Enriched] RouteRaw: ${ctx.req.route.raw}`);
 
   // 3. Execute route handler (begins lifecycle, runs hooks, ends lifecycle)
   await router.exec(ctx);
