@@ -4,15 +4,15 @@ import { LogLevel } from "../router/types";
 export function defaultHookOnExecBefore<TContext extends TDefaultCtx>(
   logLevel: LogLevel
 ) {
-  return async (ctx: TContext): Promise<TContext> => {
-    if (logLevel === "none") return ctx;
+  return async (ctx: TContext): Promise<void> => {
+    if (logLevel === "none") return;
 
     const traceId = ctx.meta.monitor.traceId;
     const pattern = ctx.req.route.pattern;
 
     if (logLevel === "minimal") {
       console.log(`[${pattern}] TraceId: ${traceId}`);
-      return ctx;
+      return;
     }
 
     const userId = ctx.user.id;
@@ -24,7 +24,7 @@ export function defaultHookOnExecBefore<TContext extends TDefaultCtx>(
       console.log(
         `[${pattern} -> ${routeRaw}] TraceId: ${traceId} | UserId: ${userId} | Seq: ${instanceSeq} | Inflight: ${inflight}`
       );
-      return ctx;
+      return;
     }
 
     // verbose
@@ -36,6 +36,5 @@ export function defaultHookOnExecBefore<TContext extends TDefaultCtx>(
     console.log(
       `[${pattern} -> ${routeRaw}] IP: ${ip} | TraceId: ${traceId} | SpanId: ${spanId} | UserId: ${userId} | UserSeq: ${userSeq} | Seq: ${instanceSeq} | Inflight: ${inflight} | Data: ${reqData}`
     );
-    return ctx;
   };
 }

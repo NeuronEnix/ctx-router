@@ -75,6 +75,7 @@ export async function exec<TContext extends TDefaultCtx>(
   // EXEC LIFECYCLE: Outer try/catch/finally
   try {
     // 1. EXEC BEFORE - Runs FIRST (context prep, before routing)
+    // Side-effect hook: mutates ctx in place, no return
     await hooks.onExecBefore(ctx);
 
     // 2. Route matching (protocol-agnostic, op + pattern based)
@@ -103,7 +104,8 @@ export async function exec<TContext extends TDefaultCtx>(
         ctx = result;
       } catch (handlerError) {
         // 6. HANDLER ERROR (handler-specific errors)
-        ctx = await hooks.onHandlerError(ctx, handlerError);
+        // Side-effect hook: mutates ctx in place, no return
+        await hooks.onHandlerError(ctx, handlerError);
       } finally {
         // 7. HANDLER FINALLY (always runs after handler)
         await hooks.onHandlerFinally(ctx);
@@ -144,7 +146,8 @@ export async function exec<TContext extends TDefaultCtx>(
         ctx = handlerResult;
       } catch (handlerError) {
         // 6. HANDLER ERROR (handler-specific errors)
-        ctx = await hooks.onHandlerError(ctx, handlerError);
+        // Side-effect hook: mutates ctx in place, no return
+        await hooks.onHandlerError(ctx, handlerError);
       } finally {
         // 7. HANDLER FINALLY (always runs after handler)
         await hooks.onHandlerFinally(ctx);
@@ -167,7 +170,8 @@ export async function exec<TContext extends TDefaultCtx>(
     });
   } catch (execError) {
     // 9. EXEC ERROR - Catches routing errors, HANDLER_NOT_FOUND, or re-thrown errors
-    ctx = await hooks.onExecError(ctx, execError);
+    // Side-effect hook: mutates ctx in place, no return
+    await hooks.onExecError(ctx, execError);
     return ctx;
   } finally {
     // 10. EXEC FINALLY - Always runs (cleanup, metrics)

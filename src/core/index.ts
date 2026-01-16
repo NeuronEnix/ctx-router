@@ -24,4 +24,5 @@ export type TDefaultCtx = {
   err: CtxError | null;
   user: CtxUser;
   meta: CtxMeta;
+  locals: Record<string, unknown>;
 };

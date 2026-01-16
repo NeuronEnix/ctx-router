@@ -24,15 +24,37 @@ export const ctxErr = ctxErrMap({
     INVALID_TOKEN: "Invalid token",
   },
 });
+
+// Example middleware
+const logMiddleware = async (ctx: TCtx): Promise<TCtx> => {
+  console.log(`[middleware] ${ctx.req.route.raw}`);
+  return ctx;
+};
+
+const authMiddleware = async (ctx: TCtx): Promise<TCtx> => {
+  console.log(`[auth] checking auth`);
+  return ctx;
+};
+
 // Set your router
-const router = new CtxRouter<TCtx>();
-
+const cr = new CtxRouter<TCtx>();
 // Health routes
-router.on("GET /health/ping").handle(api.health.ping);
+cr.route("GET /health/ping").to(api.health.ping);
+// Chained through + to
+cr.route("GET /health/ping-log")
+  .via(logMiddleware)
+  .via(authMiddleware)
+  .to(api.health.ping);
 
-// User routes
-const userRouter = router.on("user");
-userRouter.on("POST /update").handle(api.user.update);
-userRouter.on("GET /:userId").handle(api.user.detail);
+const userRateLimitMiddleware = async (ctx: TCtx): Promise<TCtx> => {
+  console.log(`[rate limit] checking rate limit`);
+  return ctx;
+}
+// User routes with inherited middleware
+const userRouter = cr.route("user").via( userRateLimitMiddleware, logMiddleware);
+userRouter.route("POST /update").to(api.user.update);
 
-export { router };
+userRouter.route("GET /:userId").to(api.user.detail);
+userRouter.route("detail").to(api.user.detail);
+
+export { cr as router };

@@ -1,10 +1,11 @@
 import { CtxError } from "../router/error";
 import { TDefaultCtx } from "../core";
 
+// Side-effect hook: mutates ctx in place, no return
 export async function defaultHookOnExecError<TContext extends TDefaultCtx>(
   ctx: TContext,
   e: CtxError | Error | unknown
-): Promise<TContext> {
+): Promise<void> {
   if (e instanceof CtxError) {
     console.log("CtxError:name:", e.name);
     console.log("CtxError:message:", e.message);
@@ -25,7 +26,7 @@ export async function defaultHookOnExecError<TContext extends TDefaultCtx>(
 
     // Set response (client-safe data only)
     ctx.res = { code: e.name, msg: e.message, data: e.data };
-    return ctx;
+    return;
   }
 
   // ideally should never come here, god forbid it did
@@ -43,5 +44,4 @@ export async function defaultHookOnExecError<TContext extends TDefaultCtx>(
     msg: error.message,
     data: {},
   };
-  return ctx;
 }

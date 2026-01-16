@@ -9,12 +9,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Register exec before hook for custom context modifications
-router.hookOnExecBefore(async (ctx) => {
+router.hook.onExec.before(async (ctx) => {
   // Demonstrate hook functionality by logging
   console.log(
     `[onExecBefore] Processing request ${ctx.id} - ${ctx.req.route.raw}`
   );
-  return ctx;
 });
 
 function getHttpCode(ctx: TCtx) {
@@ -25,7 +24,7 @@ function getHttpCode(ctx: TCtx) {
 
 app.use(async (req: Request, res: Response) => {
   // 1. Create context with default values (no side effects)
-  const ctx: TCtx = router.createCtx();
+  const ctx: TCtx = router.newCtx();
   console.log(`[1. createCtx] Created context with ID: ${ctx.id}`);
 
   // 2. Enrich context with Express request data

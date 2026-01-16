@@ -29,7 +29,7 @@ describe("enrichFromExpress", () => {
 
   beforeEach(() => {
     router = new CtxRouter<TDefaultCtx>({ logLevel: "none" });
-    ctx = router.createCtx();
+    ctx = router.newCtx();
     res = createMockResponse();
   });
 

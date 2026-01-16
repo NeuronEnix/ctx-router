@@ -6,21 +6,57 @@ import {
   TRoute,
   TRouteEntry,
   THooks,
+  THookDSL,
   LogLevel,
   CtxRouterConfig,
 } from "./types";
 import { TRouterInstance, createRouterInstance } from "./instance";
 import { exec as execImpl } from "./lifecycle.exec";
 
+// No-op hook for defaults
+const noop = async () => {};
+
+// Factory for creating default hooks
+function createDefaultHooks<TContext extends TDefaultCtx>(
+  logLevel: LogLevel
+): THooks<TContext> {
+  return {
+    onExecBefore: defaultHookOnExecBefore(logLevel),
+    onExecAfter: noop,
+    onExecError: defaultHookOnExecError,
+    onExecFinally: noop,
+    onHandlerBefore: noop,
+    onHandlerAfter: noop,
+    onHandlerError: noop,
+    onHandlerFinally: noop,
+  };
+}
+
 export class CtxRouter<TContext extends TDefaultCtx> {
   // Segment tracking for scoped router
   private segments: string[] = [];
+
+  // Middleware chain for this router scope
+  private middleware: Array<(ctx: TContext) => TContext | Promise<TContext>> =
+    [];
+
+  // Handler for this route (set by to())
+  private handler: ((ctx: TContext) => TContext | Promise<TContext>) | null =
+    null;
 
   // Route storage: exact matches (O(1)) and param routes (regex)
   public exactRoutes = new Map<string, TRouteEntry<TContext>>();
   public paramRoutes: TRouteEntry<TContext>[] = [];
 
+  // Hook state (shared across scoped routers)
   private hooks: THooks<TContext>;
+
+  // Sealing flag - prevents hook modification after first exec
+  private sealed = false;
+
+  // Public hook DSL (created once, stable reference)
+  public readonly hook: THookDSL<TContext, CtxRouter<TContext>>;
+
   public logLevel: LogLevel;
   public statsEnabled: boolean;
 
@@ -32,31 +68,73 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     return { ...this.instance };
   }
 
-  constructor(config: CtxRouterConfig = {}) {
+  constructor(config: CtxRouterConfig = {}, sharedHooks?: THooks<TContext>) {
     this.logLevel = config.logLevel ?? "standard";
     this.statsEnabled = config.statsEnabled ?? true;
     this.instance = createRouterInstance();
-    this.hooks = {
-      // Exec lifecycle (outer)
-      onExecBefore: defaultHookOnExecBefore(this.logLevel),
-      onExecAfter: async (ctx) => ctx,
-      onExecError: defaultHookOnExecError,
-      onExecFinally: async (ctx) => ctx,
-      // Handler lifecycle (inner)
-      onHandlerBefore: async (ctx) => ctx,
-      onHandlerAfter: async (ctx) => ctx,
-      onHandlerError: async (ctx) => ctx,
-      onHandlerFinally: async (ctx) => ctx,
+
+    // Use shared hooks if provided (from parent via .on()), else create new
+    this.hooks = sharedHooks ?? createDefaultHooks(this.logLevel);
+
+    // Create hook DSL once (stable reference, no getter)
+    this.hook = this.createHookDSL();
+  }
+
+  // Prevents hook modification after first exec
+  private assertNotSealed(): void {
+    if (this.sealed) {
+      throw new Error("Hooks must be registered during startup, before exec()");
+    }
+  }
+
+  // Creates the hook DSL object (called once in constructor)
+  private createHookDSL(): THookDSL<TContext, CtxRouter<TContext>> {
+    return {
+      onExec: {
+        before: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onExecBefore = fn;
+          return this;
+        },
+        after: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onExecAfter = fn;
+          return this;
+        },
+        error: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onExecError = fn;
+          return this;
+        },
+        finally: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onExecFinally = fn;
+          return this;
+        },
+      },
+      onHandler: {
+        before: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onHandlerBefore = fn;
+          return this;
+        },
+        after: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onHandlerAfter = fn;
+          return this;
+        },
+        error: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onHandlerError = fn;
+          return this;
+        },
+        finally: (fn) => {
+          this.assertNotSealed();
+          this.hooks.onHandlerFinally = fn;
+          return this;
+        },
+      },
     };
-  }
-
-  // Exec lifecycle hook setters
-  hookOnExecBefore(handler: THooks<TContext>["onExecBefore"]) {
-    this.hooks.onExecBefore = handler;
-  }
-
-  hookOnExecAfter(handler: THooks<TContext>["onExecAfter"]) {
-    this.hooks.onExecAfter = handler;
   }
 
   /**
@@ -64,7 +142,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    * Does NOT increment inflight or set timing - that happens in exec().
    * Adapters should enrich the returned context before calling exec().
    */
-  public createCtx(protocol?: string): TContext {
+  public newCtx(protocol?: string): TContext {
     // Build default user (anonymous)
     const user = {
       kind: "user" as const,
@@ -122,12 +200,16 @@ export class CtxRouter<TContext extends TDefaultCtx> {
           db: [],
         },
       },
+      locals: {},
     };
 
     return ctx as TContext;
   }
 
   async exec(ctx: TContext): Promise<TContext> {
+    // Seal hooks on first exec - no more modifications allowed
+    this.sealed = true;
+
     return await execImpl(
       ctx,
       this, // Pass router instance instead of routes array
@@ -139,46 +221,92 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
   /**
    * Creates a scoped router with an additional segment prefix.
-   * Returns a new router instance that shares storage with the parent.
+   * Returns a new router instance that shares storage and hooks with the parent.
    */
-  public on(segment: string): CtxRouter<TContext> {
+  public route(
+    segment: string
+  ): Pick<CtxRouter<TContext>, "route" | "via" | "to"> {
     if (typeof segment !== "string" || segment.length === 0) {
       throw new Error("Router.on() requires a non-empty string segment");
     }
 
-    // Create new scoped router with accumulated segments
-    const scoped = new CtxRouter<TContext>({
-      logLevel: this.logLevel,
-      statsEnabled: this.statsEnabled,
-    });
+    // Create new scoped router with shared hooks
+    const scoped = new CtxRouter<TContext>(
+      { logLevel: this.logLevel, statsEnabled: this.statsEnabled },
+      this.hooks // Pass shared hooks state
+    );
 
-    // Copy segment chain
+    // Copy segment chain and middleware
     scoped.segments = [...this.segments, segment];
+    scoped.middleware = [...this.middleware];
 
     // Share storage (routes registered on any scope go to same storage)
     scoped.exactRoutes = this.exactRoutes;
     scoped.paramRoutes = this.paramRoutes;
 
-    // Share hooks
-    scoped.hooks = this.hooks;
-
     return scoped;
   }
 
   /**
-   * Registers a handler for the accumulated segment prefix.
-   * Analyzes segments for HTTP grammar and creates appropriate routes.
+   * Adds middleware to execute before the handler.
+   * Middleware runs in order: first via() → last via() → handler.
+   * Chainable and supports variadic args.
    */
-  public handle(handler: (ctx: TContext) => Promise<TContext>): void {
-    if (typeof handler !== "function") {
-      throw new Error("Router.handle() requires a handler function");
+  public via(
+    ...fns: Array<(ctx: TContext) => TContext | Promise<TContext>>
+  ): Pick<CtxRouter<TContext>, "route" | "via" | "to"> {
+    for (const fn of fns) {
+      if (typeof fn !== "function") {
+        throw new Error("Router.via() requires function arguments");
+      }
+      this.middleware.push(fn);
     }
+    return this;
+  }
 
+  /**
+   * Registers the handler for this route. Terminal - no chaining.
+   * Middleware (via) runs first, then this handler.
+   * Returns Promise<TContext> for type inference with handler.
+   */
+  public to(
+    handler: (ctx: TContext) => TContext | Promise<TContext>
+  ): Promise<TContext> {
+    if (typeof handler !== "function") {
+      throw new Error("Router.to() requires a function");
+    }
+    this.handler = handler;
+    this.registerRoute();
+    return undefined as unknown as Promise<TContext>;
+  }
+
+  /**
+   * Composes middleware + handler and registers the route.
+   */
+  private registerRoute(): void {
     if (this.segments.length === 0) {
       throw new Error(
-        "Cannot register handler without segments. Use .on(segment) first."
+        "Cannot register handler without segments. Use .route(segment) first."
       );
     }
+
+    if (!this.handler) {
+      throw new Error(
+        "Cannot register route without handler. Use .to(handler)."
+      );
+    }
+
+    // Compose: middleware chain → handler
+    const mwChain = [...this.middleware];
+    const handler = this.handler;
+
+    const composedHandler = async (ctx: TContext): Promise<TContext> => {
+      let result = ctx;
+      for (const mw of mwChain) {
+        result = await mw(result);
+      }
+      return handler(result);
+    };
 
     // 1. Detect HTTP grammar and build patterns
     const { hasHttp, httpOp, nonHttpSegments } = this.analyzeSegments(
@@ -189,20 +317,19 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     const pattern = this.buildPattern(nonHttpSegments, false);
     const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
-    // 3. Register primary pattern route
+    // 3. Build primary route
     const route: TRoute<TContext> = {
       pattern,
       separator: ".",
       matcher,
-      handler,
+      handler: composedHandler,
     } as TRoute<TContext>;
 
-    // Only add op if HTTP grammar is present
     if (hasHttp && httpOp) {
       route.op = httpOp;
     }
 
-    this.registerRoute(route, this.segments);
+    this.addRouteToStorage(route, this.segments);
 
     // 4. If HTTP grammar detected, register HTTP route too (uses "/" separator)
     if (hasHttp && httpOp) {
@@ -216,10 +343,10 @@ export class CtxRouter<TContext extends TDefaultCtx> {
         pattern: httpPattern,
         separator: "/",
         matcher: httpMatcher,
-        handler,
+        handler: composedHandler,
       };
 
-      this.registerRoute(httpRoute, this.segments);
+      this.addRouteToStorage(httpRoute, this.segments);
     }
   }
 
@@ -300,9 +427,9 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   }
 
   /**
-   * Registers a route in either exact or param storage.
+   * Adds a route to storage (exact or param).
    */
-  private registerRoute(route: TRoute<TContext>, segments: string[]): void {
+  private addRouteToStorage(route: TRoute<TContext>, segments: string[]): void {
     const entry: TRouteEntry<TContext> = { route, segments };
 
     // Check if pattern has params
@@ -320,30 +447,5 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
       this.exactRoutes.set(key, entry);
     }
-  }
-
-  hookOnExecError(handler: THooks<TContext>["onExecError"]) {
-    this.hooks.onExecError = handler;
-  }
-
-  hookOnExecFinally(handler: THooks<TContext>["onExecFinally"]) {
-    this.hooks.onExecFinally = handler;
-  }
-
-  // Handler lifecycle hook setters
-  hookOnHandlerBefore(handler: THooks<TContext>["onHandlerBefore"]) {
-    this.hooks.onHandlerBefore = handler;
-  }
-
-  hookOnHandlerAfter(handler: THooks<TContext>["onHandlerAfter"]) {
-    this.hooks.onHandlerAfter = handler;
-  }
-
-  hookOnHandlerError(handler: THooks<TContext>["onHandlerError"]) {
-    this.hooks.onHandlerError = handler;
-  }
-
-  hookOnHandlerFinally(handler: THooks<TContext>["onHandlerFinally"]) {
-    this.hooks.onHandlerFinally = handler;
   }
 }
