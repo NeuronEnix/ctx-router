@@ -66,7 +66,7 @@ export function enrichFromExpress(
   if (apiVersion) client.apiVersion = apiVersion;
   if (sessionId) client.sessionId = sessionId;
 
-  // Build invocation (only include fields that exist)
+  // Build clientInvocation (only include fields that exist)
   const invocationTraceId = getHeader(req.headers, "x-ctx-trace-id");
   const invocationSeq = parseInt(
     getHeader(req.headers, "x-ctx-seq") || "0",
@@ -75,10 +75,10 @@ export function enrichFromExpress(
   const clientTsStr = getHeader(req.headers, "x-ctx-ts");
   const clientTs = clientTsStr ? new Date(clientTsStr).getTime() : undefined;
 
-  const invocation: TDefaultCtx["req"]["invocation"] = {};
-  if (invocationTraceId) invocation.traceId = invocationTraceId;
-  if (invocationSeq) invocation.seq = invocationSeq;
-  if (clientTs && !isNaN(clientTs)) invocation.ts = clientTs;
+  const clientInvocation: TDefaultCtx["req"]["clientInvocation"] = {};
+  if (invocationTraceId) clientInvocation.traceId = invocationTraceId;
+  if (invocationSeq) clientInvocation.seq = invocationSeq;
+  if (clientTs && !isNaN(clientTs)) clientInvocation.ts = clientTs;
 
   // Build transport meta (only include fields that exist)
   const userAgent = getHeader(req.headers, "user-agent");
@@ -97,7 +97,8 @@ export function enrichFromExpress(
 
   if (Object.keys(auth).length > 0) ctx.req.auth = auth;
   if (Object.keys(client).length > 0) ctx.req.client = client;
-  if (Object.keys(invocation).length > 0) ctx.req.invocation = invocation;
+  if (Object.keys(clientInvocation).length > 0)
+    ctx.req.clientInvocation = clientInvocation;
 
   ctx.req.transport = {
     protocol: "http",

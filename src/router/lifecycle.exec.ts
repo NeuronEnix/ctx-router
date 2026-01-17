@@ -43,7 +43,7 @@ export async function exec<TContext extends TDefaultCtx>(
   const spanId = `${instance.ID}-${seq}`;
 
   // Compute timing values using client timestamp if available
-  const clientIn = ctx.req.invocation?.ts ?? inTime;
+  const clientIn = ctx.req.clientInvocation?.ts ?? inTime;
   const owd = inTime - clientIn;
 
   // Update context with begin values (replace entire meta object due to readonly properties)
@@ -88,7 +88,6 @@ export async function exec<TContext extends TDefaultCtx>(
 
     if (exactMatch) {
       // Exact match found - populate context and execute
-      ctx.req.params = {}; // No params in exact match
       ctx.req.route.pattern = exactMatch.route.pattern;
 
       // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
@@ -130,7 +129,9 @@ export async function exec<TContext extends TDefaultCtx>(
       if (result === false) continue;
 
       // Match found - populate context and execute
-      ctx.req.params = result.params as Record<string, string>;
+      // Merge matched params into req.data (params have lowest priority)
+      const matchedParams = result.params as Record<string, string>;
+      ctx.req.data = { ...matchedParams, ...ctx.req.data };
       ctx.req.route.pattern = route.pattern;
 
       // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
@@ -186,18 +187,6 @@ export async function exec<TContext extends TDefaultCtx>(
       in: ctx.meta.ts.in,
       clientIn: ctx.meta.ts.clientIn,
       out: outTime,
-      execTime,
-      owd: ctx.meta.ts.owd,
-    };
-
-    const clientSeq = ctx.req.invocation?.seq || 0;
-    ctx.res.meta = {
-      ctxId: ctx.id,
-      seq: Number.isInteger(clientSeq) ? clientSeq : -1,
-      traceId: ctx.meta.monitor.traceId,
-      spanId: ctx.meta.monitor.spanId,
-      inTime: ctx.meta.ts.in,
-      outTime,
       execTime,
       owd: ctx.meta.ts.owd,
     };

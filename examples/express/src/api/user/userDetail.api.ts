@@ -4,7 +4,7 @@ export async function execute(reqData: TReqData): Promise<TResData> {
   return {
     userDetail: {
       userId: reqData.userId,
-      userName: "kaushik",
+      userName: "my-name",
     },
   };
 }
@@ -20,13 +20,11 @@ export async function auth(ctx: TCtx): Promise<TCtx> {
   throw ctxErr.auth.UNAUTHORIZED();
 }
 
-export async function validate(ctx: TCtx): Promise<TReqData> {
-  // Validate request data and merge route params
-  // Route params are now in ctx.req.params (not merged into data by router)
+export async function validate(_ctx: TCtx): Promise<TReqData> {
+  // Route params are automatically merged into req.data by the router
   return {
-    ...ctx.req.data,
-    ...ctx.req.params,
-  } as TReqData;
+    userId: "user_123",
+  };
 }
 
 type TReqData = {

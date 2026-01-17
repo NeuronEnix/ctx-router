@@ -1,4 +1,8 @@
-type CtxResMeta = {
+/**
+ * Response metadata type (available for adapters to wrap responses).
+ * Not included in core CtxRes - adapters can optionally add this to transport-specific envelopes.
+ */
+export type CtxResMeta = {
   ctxId?: string;
   seq?: number;
   traceId?: string;
@@ -10,8 +14,13 @@ type CtxResMeta = {
 };
 
 export type CtxRes = {
-  code: string; // OK, ERROR, USER_NOT_FOUND, only OK is successful, rest are errors
-  msg: string; // to show to user human readble
-  data: Record<string, unknown>; // the actual response data that goes in body or something to be sent back
-  meta?: CtxResMeta; // few metadata of current request, optional to send only for admin user they will find this in response, actual user will not see this in response
+  /**
+   * Domain-level outcome code (transport-agnostic).
+   * Examples: "OK", "ERROR", "USER_NOT_FOUND"
+   * Only "OK" is considered successful, all others are errors.
+   * Note: This does NOT imply HTTP status mapping. Adapters map this to transport-specific codes.
+   */
+  code: string;
+  msg: string; // Human-readable message for the user
+  data: Record<string, unknown>; // The actual response data
 };

@@ -29,7 +29,7 @@ export function defaultHookOnExecBefore<TContext extends TDefaultCtx>(
 
     // verbose
     const ip = ctx.req.transport?.network?.originIp || "unknown";
-    const userSeq = ctx.req.invocation?.seq || 0;
+    const userSeq = ctx.req.clientInvocation?.seq || 0;
     const spanId = ctx.meta.monitor.spanId;
     const reqData = JSON.stringify(ctx.req.data);
 

@@ -132,7 +132,7 @@ describe("CtxRouter", () => {
 
     it("supports chained segments", async () => {
       router.route("user").route(":id").route("GET").to(async (ctx) => {
-        ctx.res.data = { userId: ctx.req.params?.id };
+        ctx.res.data = { userId: (ctx.req.data as any).id };
         return ctx;
       });
 
@@ -141,7 +141,7 @@ describe("CtxRouter", () => {
 
       await router.exec(ctx);
 
-      expect(ctx.req.params?.id).toBe("123");
+      expect((ctx.req.data as any).id).toBe("123");
       expect(ctx.res.data).toEqual({ userId: "123" });
     });
 
@@ -149,7 +149,7 @@ describe("CtxRouter", () => {
       const userRouter = router.route("user");
 
       userRouter.route("GET /:id").to(async (ctx) => {
-        ctx.res.data = { action: "get", id: ctx.req.params?.id };
+        ctx.res.data = { action: "get", id: (ctx.req.data as any).id };
         return ctx;
       });
 
@@ -173,7 +173,7 @@ describe("CtxRouter", () => {
   describe("HTTP grammar detection", () => {
     it("creates dual routes when HTTP grammar is present", async () => {
       router.route("job").route(":id").route("clean").route("GET").to(async (ctx) => {
-        ctx.res.data = { cleaned: ctx.req.params?.id };
+        ctx.res.data = { cleaned: (ctx.req.data as any).id };
         return ctx;
       });
 
@@ -182,19 +182,19 @@ describe("CtxRouter", () => {
       setRoute(ctx1, "GET", "job.123.clean");
       await router.exec(ctx1);
       expect(ctx1.req.route.pattern).toBe("job.:id.clean");
-      expect(ctx1.req.params).toEqual({ id: "123" });
+      expect((ctx1.req.data as any).id).toBe("123");
 
       // Should match slash-separated HTTP pattern
       const ctx2 = router.newCtx();
       setRoute(ctx2, "GET", "/job/456/clean");
       await router.exec(ctx2);
       expect(ctx2.req.route.pattern).toBe("/job/:id/clean");
-      expect(ctx2.req.params).toEqual({ id: "456" });
+      expect((ctx2.req.data as any).id).toBe("456");
     });
 
     it("single pattern route when no HTTP grammar", async () => {
       router.route("event").route(":name").to(async (ctx) => {
-        ctx.res.data = { event: ctx.req.params?.name };
+        ctx.res.data = { event: (ctx.req.data as any).name };
         return ctx;
       });
 
@@ -202,7 +202,7 @@ describe("CtxRouter", () => {
       setRoute(ctx, undefined, "event.test");
       await router.exec(ctx);
       expect(ctx.req.route.pattern).toBe("event.:name");
-      expect(ctx.req.params).toEqual({ name: "test" });
+      expect((ctx.req.data as any).name).toBe("test");
     });
   });
 
@@ -230,7 +230,7 @@ describe("CtxRouter", () => {
 
     it("matches routes with params", async () => {
       router.route("user").route(":userId").route("GET").to(async (ctx) => {
-        ctx.res.data = { userId: ctx.req.params?.userId };
+        ctx.res.data = { userId: (ctx.req.data as any).userId };
         return ctx;
       });
 
@@ -239,7 +239,7 @@ describe("CtxRouter", () => {
 
       await router.exec(ctx);
 
-      expect(ctx.req.params?.userId).toBe("789");
+      expect((ctx.req.data as any).userId).toBe("789");
       expect(ctx.res.data).toEqual({ userId: "789" });
     });
 
@@ -280,7 +280,7 @@ describe("CtxRouter", () => {
 
     it("routes without op match any operation (wildcard)", async () => {
       router.route("job").route(":id").to(async (ctx) => {
-        ctx.res.data = { id: ctx.req.params?.id, op: ctx.req.route.op };
+        ctx.res.data = { id: (ctx.req.data as any).id, op: ctx.req.route.op };
         return ctx;
       });
 
@@ -320,7 +320,7 @@ describe("CtxRouter", () => {
     it("params work across all transports", async () => {
       // Register with HTTP grammar to create both dot and slash patterns
       router.route("job").route(":resource").route("clean").route("GET").to(async (ctx) => {
-        ctx.res.data = { resource: ctx.req.params?.resource };
+        ctx.res.data = { resource: (ctx.req.data as any).resource };
         return ctx;
       });
 
@@ -328,13 +328,13 @@ describe("CtxRouter", () => {
       const kafkaCtx = router.newCtx("kafka");
       setRoute(kafkaCtx, "GET", "job.abc.clean");
       await router.exec(kafkaCtx);
-      expect(kafkaCtx.req.params).toEqual({ resource: "abc" });
+      expect((kafkaCtx.req.data as any).resource).toBe("abc");
 
       // HTTP-style (slash separator)
       const httpCtx = router.newCtx("http");
       setRoute(httpCtx, "GET", "/job/xyz/clean");
       await router.exec(httpCtx);
-      expect(httpCtx.req.params).toEqual({ resource: "xyz" });
+      expect((httpCtx.req.data as any).resource).toBe("xyz");
     });
   });
 
@@ -381,9 +381,9 @@ describe("CtxRouter", () => {
 
       await router.exec(ctx);
 
-      expect(ctx.res.meta).toBeDefined();
-      expect(ctx.res.meta?.ctxId).toMatch(/^[a-f0-9]+-1$/);
-      expect(ctx.res.meta?.traceId).toBe(ctx.id);
+      // Metadata is in ctx.meta, not ctx.res.meta
+      expect(ctx.meta.monitor.traceId).toBe(ctx.id);
+      expect(ctx.meta.instance.seq).toBe(1);
     });
 
     it("increments and decrements INFLIGHT during execution", async () => {

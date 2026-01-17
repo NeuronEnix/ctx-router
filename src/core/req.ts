@@ -7,13 +7,6 @@ export type CtxReq<Data = Record<string, unknown>> = {
   data: Data;
 
   /**
-   * Matched route parameters from the router.
-   * Set by the router during route matching.
-   * Example: For route "/users/:id" matched with "/users/123", params = { id: "123" }
-   */
-  params?: Record<string, string>;
-
-  /**
    * Route data (op + raw + pattern).
    * Adapter sets op/raw (concrete values for this invocation).
    * Router reassigns pattern after matching.
@@ -81,9 +74,12 @@ export type CtxReq<Data = Record<string, unknown>> = {
   };
 
   /**
-   * Invocation-level metadata provided by the caller.
+   * Caller-provided invocation hints (not authoritative).
+   * clientInvocation contains caller-provided hints only.
+   * Canonical values are resolved into ctx.meta.
+   * Used by adapters/tracing middleware to adopt, override, or ignore client hints.
    */
-  invocation?: {
+  clientInvocation?: {
     traceId?: string;
     spanId?: string;
     seq?: number;
@@ -116,7 +112,14 @@ export type CtxReq<Data = Record<string, unknown>> = {
     request?: {
       method?: string;
       path?: string;
-      operation?: string;
+      op?: string;
+    };
+
+    data?: {
+      params?: Record<string, string>;
+      query?: Record<string, string>;
+      body?: Record<string, unknown>;
+      [key: string]: unknown;
     };
 
     /**
