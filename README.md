@@ -1,58 +1,113 @@
 # ctx-router
 
-[![npm version](https://img.shields.io/npm/v/ctx-router.svg)](https://www.npmjs.com/package/ctx-router)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+A transport-agnostic router built around a single execution context.
 
-**Write your business logic once. Run it on Express, Fastify, Lambda, SQS, gRPC, or anything else.**
+Write your business logic once. Run it over HTTP, events, jobs, queues, or anything else — without rewriting handlers.
 
-`ctx-router` is a framework-agnostic router that normalizes all transport layers (HTTP frameworks, serverless functions, event streams, gRPC) into a unified context. Your business logic stays the same regardless of how requests arrive.
+## Why ctx-router exists
 
-## The Problem
+Most applications start simple:
 
-Building modern applications often requires supporting multiple transport layers:
+- HTTP with Express / Fastify
+- A few REST endpoints
+- Some middleware
 
-- Start with **Express**, then want to try **Fastify** or **Koa** → Need to rewrite handlers
-- Deploy to **AWS Lambda** → Need to rewrite request/response handling
-- Add **SQS** or **Kinesis** processing → Need different code for events vs HTTP
-- Switch from **AWS** to **Google Cloud Functions** or **Azure Functions** → Vendor lock-in
-- Support **gRPC** alongside **HTTP** → Maintain duplicate logic
+Then reality hits:
 
-Existing solutions only solve part of this:
+- You add background jobs (SQS, Kafka, cron)
+- You need async workers
+- You want to reuse business logic
+- You deploy to Lambda or another runtime
+- You end up duplicating logic across transports
 
-- Framework adapters (serverless-express, etc.) only handle HTTP → Lambda
-- NestJS supports multiple transports but requires heavy framework buy-in
-- You end up with transport-specific code scattered everywhere
+The problem is not routing.
+The problem is transport leakage into business logic.
 
-## The Solution
+## What ctx-router is
 
-`ctx-router` sits between incoming requests and your business logic, providing:
+ctx-router is a routing + execution layer that:
 
-**Without ctx-router:**
+- Normalizes all ingress types into a single context
+- Routes based on patterns, not frameworks
+- Executes logic as a linear pipeline
+- Keeps transport concerns outside your business code
+
+It is not:
+
+- A web framework
+- An HTTP abstraction
+- A DI container
+
+It is a context router.
+
+## Core idea (one sentence)
+
+Everything becomes a ctx. Routes select a pipeline. Pipelines mutate the ctx.
+
+## High-level flow
+
+```mermaid
+flowchart LR
+    A["Ingress<br/>HTTP / Queue / Job"] --> B["Create ctx"]
+    B --> C["Adapter enrich"]
+    C --> D["router.exec(ctx)"]
+    D --> E["Route match"]
+    E --> F["Pipeline execution"]
+    F --> G["ctx.res set"]
+    G --> H["Adapter sends response / ack"]
+```
+
+## Key concepts (read in order)
+
+### 1. Context (ctx)
+
+The single object that flows through your entire system.
+
+- Created once per request / event
+- Mutated by middleware and handlers
+- Returned at the end
+
+Business logic never touches raw framework objects.
+
+### 2. Routes are patterns
+
+Routes are identified by patterns, not concrete values.
+
+Examples:
+
+- `user.:id.detail`
+- `job.:resource.clean`
+- `GET /user/:id`
+
+Patterns:
+
+- are low-cardinality
+- are safe to log & index
+- are the identity of a route
+
+Raw values are kept separately.
+
+### 3. Pipelines are linear
+
+Every route resolves to a prebuilt pipeline:
 
 ```
-Express Handler → Your Logic
-Lambda Handler → Rewritten Logic
-SQS Handler → More Rewritten Logic
-gRPC Handler → Even More Rewritten Logic
+[ middleware1 → middleware2 → handler ]
 ```
 
-**With ctx-router:**
+- Always sequential
+- Always awaited
+- No fan-out
+- No magic
 
-```
-Express → toCtx.fromExpress() ┐
-Lambda → toCtx.fromLambda()   ├→ Unified Context → Your Logic (once!)
-SQS → toCtx.fromSQS()         │
-gRPC → toCtx.fromGRPC()       ┘
-```
+### 4. Build-time vs runtime
 
-### Key Benefits
+| Phase      | What happens                               |
+| ---------- | ------------------------------------------ |
+| Build time | `route()`, `via()`, `to()` build pipelines |
+| Runtime    | `exec(ctx)` selects & runs a pipeline      |
 
-- ✅ **Framework-agnostic**: Switch from Express to Fastify to Koa without touching business logic
-- ✅ **Cloud-agnostic**: Same code works on AWS Lambda, Google Cloud Functions, Azure Functions
-- ✅ **Multi-transport**: HTTP, events (SQS, Kinesis), gRPC, WebSockets all normalized
-- ✅ **Lightweight**: Not a framework, just a routing layer (~10KB)
-- ✅ **Type-safe**: Full TypeScript support with generic context types
-- ✅ **Clean Architecture**: Separates transport concerns from business logic
+The runtime never sees the DSL.
 
 ## Installation
 
@@ -60,377 +115,206 @@ gRPC → toCtx.fromGRPC()       ┘
 npm install ctx-router
 ```
 
-Or using pnpm:
+## Minimal example
 
-```bash
-pnpm add ctx-router
-```
-
-## Quick Start
-
-### 1. Define Your Router (Once)
-
-**`router.ts`** - Your centralized, transport-agnostic router
+### `router.ts`
 
 ```typescript
 import { CtxRouter, TDefaultCtx } from "ctx-router";
 import * as api from "./api";
 
-// Extend the default context with your app's requirements
 export type TCtx = TDefaultCtx & {
-  user: {
-    id: string;
-    role: string[];
-  };
+  user: { role: string[] };
 };
 
-// Create your router
 export const router = new CtxRouter<TCtx>();
 
-// Define routes once
-router.handle(
-  {
-    protocol: "http",
-    action: "GET",
-    pattern: "/health/ping",
-  },
-  api.health.ping
-);
-router.handle(
-  {
-    protocol: "http",
-    action: "POST",
-    pattern: "/user/update",
-  },
-  api.user.update
-);
-router.handle(
-  {
-    protocol: "http",
-    action: "GET",
-    pattern: "/user/:id",
-  },
-  api.user.detail
-);
+router.route("GET /health/ping").to(api.health.ping);
 
-// Global error handler
-router.onError(async (ctx, error) => {
-  console.error("Route error:", error);
-  ctx.res.code = "ERROR";
-  ctx.res.msg = "Something went wrong";
-  return ctx;
-});
+const userRouter = router.route("user").via(rateLimit, auth);
+
+userRouter.route("POST /update").to(api.user.update);
+userRouter.route("GET /:userId").to(api.user.detail);
+userRouter.route("detail").to(api.user.detail);
 ```
 
-### 2. Write Your Business Logic (Once)
-
-**`api/user/userUpdate.api.ts`** - Handler that works everywhere
+### `server.ts` (Express example)
 
 ```typescript
-import { TCtx } from "../../router";
-
-// Authentication - works regardless of transport
-export async function auth(ctx: TCtx): Promise<TCtx> {
-  // Your auth logic here (JWT validation, etc.)
-  if (!ctx.user || !ctx.user.role.includes("USER")) {
-    throw new Error("Unauthorized");
-  }
-  return ctx;
-}
-
-// Validation - transport-agnostic
-export async function validate(ctx: TCtx): Promise<TReqData> {
-  const data = ctx.req.data as TReqData;
-  // Your validation logic
-  return data;
-}
-
-// Business logic - pure, no transport concerns
-export async function execute(reqData: TReqData): Promise<TResData> {
-  return {
-    userId: reqData.userId,
-    userName: reqData.userName,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-type TReqData = { userId: string; userName: string };
-type TResData = { userId: string; userName: string; updatedAt: string };
-```
-
-### 3. Connect Any Transport Layer
-
-#### Express.js
-
-**`express.ts`** - 10 lines to connect Express
-
-```typescript
-import express, { Request, Response } from "express";
-import { toCtx } from "ctx-router";
+import express from "express";
+import { adapter } from "ctx-router";
 import { router, TCtx } from "./router";
 
 const app = express();
 app.use(express.json());
 
-function getHttpCode(ctx: TCtx) {
-  if (ctx.res.code === "OK") return 200;
-  if (ctx.res.code === "UNKNOWN_ERROR") return 500;
-  return 400;
-}
+app.use(async (req, res) => {
+  const ctx: TCtx = router.newCtx();
+  adapter.enrichFromExpress(ctx, req, res);
 
-app.all("*", async (req: Request, res: Response) => {
-  const ctx: TCtx = toCtx.fromExpress(req);
   await router.exec(ctx);
-  res.status(getHttpCode(ctx)).json(ctx.res);
+
+  res.status(ctx.res.code === "OK" ? 200 : 400).json(ctx.res);
 });
 
-app.listen(3000, () => console.log("Server running on port 3000"));
+app.listen(3000);
 ```
 
-#### AWS Lambda
+The same router works for Lambda, SQS, Kafka, cron jobs, etc.
 
-**`lambda.ts`** - Same business logic, different transport
+## Routing DSL
+
+### `route(segment)`
+
+Adds a prefix segment.
 
 ```typescript
-import { APIGatewayProxyEvent, APIGatewayProxyResult } from "aws-lambda";
-import { toCtx } from "ctx-router";
-import { router, TCtx } from "./router";
-
-export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
-  const ctx: TCtx = toCtx.fromLambda(event);
-  await router.exec(ctx);
-
-  return {
-    statusCode: ctx.res.code === "OK" ? 200 : 400,
-    body: JSON.stringify(ctx.res),
-  };
-};
+router.route("user").route(":id").route("detail");
 ```
 
-#### AWS SQS
+Builds the pattern:
 
-**`sqs.ts`** - Process events with the same handlers
+```
+user.:id.detail
+```
+
+### `via(...middleware)`
+
+Adds middleware to the pipeline.
 
 ```typescript
-import { SQSEvent } from "aws-lambda";
-import { toCtx } from "ctx-router";
-import { router, TCtx } from "./router";
+route("x").via(auth, validate).to(handler);
+```
 
-export const handler = async (event: SQSEvent): Promise<void> => {
-  for (const record of event.Records) {
-    const ctx: TCtx = toCtx.fromSQS(record);
-    await router.exec(ctx);
-    // Process result as needed
+- Sequential
+- Awaited
+- Mutates ctx
+
+### `to(handler)`
+
+Registers the terminal handler.
+
+- Exactly one handler
+- Ends the pipeline
+- Build-time only
+- Returns void
+
+## Execution lifecycle (authoritative)
+
+```mermaid
+sequenceDiagram
+    participant Ingress
+    participant Router
+    participant Hooks
+    participant Handler
+
+    Ingress->>Router: newCtx()
+    Ingress->>Router: enrich(ctx)
+    Ingress->>Router: exec(ctx)
+
+    Router->>Router: init metrics & trace
+    Router->>Hooks: onExecBefore(ctx)
+
+    Router->>Router: match route
+    Router->>Handler: run pipeline
+
+    Handler-->>Router: ctx
+    Router->>Hooks: onExecAfter(ctx)
+
+    Router->>Hooks: onExecFinally(ctx)
+    Router-->>Ingress: ctx
+```
+
+## Hooks (system lifecycle)
+
+Hooks wrap execution, not routing DSL.
+
+```typescript
+router.hook.onExec.before(async (ctx) => {
+  console.log("request in", ctx.id);
+});
+
+router.hook.onExec.error(async (ctx, err) => {
+  ctx.res.code = "ERROR";
+});
+```
+
+Available hooks:
+
+- `onExec.before`
+- `onExec.after`
+- `onExec.error`
+- `onExec.finally`
+
+Hooks are side-effect only and mutate ctx directly.
+
+## Error handling
+
+ctx-router provides a structured error system.
+
+### Define your error class
+
+```typescript
+class AppError extends CtxBaseError {
+  constructor(e) {
+    super(e);
   }
-};
-```
-
-#### Fastify (or Koa, Hapi, etc.)
-
-**`fastify.ts`** - Switch frameworks without touching business logic
-
-```typescript
-import Fastify from "fastify";
-import { toCtx } from "ctx-router";
-import { router, TCtx } from "./router";
-
-const fastify = Fastify();
-
-fastify.all("*", async (request, reply) => {
-  const ctx: TCtx = toCtx.fromFastify(request);
-  await router.exec(ctx);
-  reply.status(ctx.res.code === "OK" ? 200 : 400).send(ctx.res);
-});
-
-fastify.listen({ port: 3000 });
-```
-
-## Architecture
-
-### Context Structure
-
-The unified context (`TCtx`) contains everything your business logic needs:
-
-```typescript
-type TDefaultCtx = {
-  req: {
-    method: string; // GET, POST, etc.
-    path: string; // /user/123
-    query: Record<string, any>;
-    params: Record<string, any>;
-    headers: Record<string, any>;
-    data: any; // Body/payload
-  };
-  res: {
-    code: string; // OK, ERROR, etc.
-    msg: string;
-    data: any;
-  };
-  meta: {
-    log: {
-      stdout: string[];
-    };
-  };
-  user: any; // Extend with your user type
-};
-```
-
-### Handler Structure
-
-Handlers follow a consistent pattern:
-
-```typescript
-export async function auth(ctx: TCtx): Promise<TCtx> {
-  // Authenticate request, populate ctx.user
-  return ctx;
-}
-
-export async function validate(ctx: TCtx): Promise<TReqData> {
-  // Validate and transform ctx.req.data
-  return validatedData;
-}
-
-export async function execute(reqData: TReqData): Promise<TResData> {
-  // Pure business logic, no context needed
-  return result;
 }
 ```
 
-## Advanced Features
-
-### Custom Error Types
+### Create error map
 
 ```typescript
-import { ctxErrMap } from "ctx-router";
-
-export const ctxErr = ctxErrMap({
-  general: {
-    UNKNOWN_ERROR: "Something went wrong",
-    NOT_FOUND: "Resource not found",
-  },
+export const appErr = ctxErrMap(AppError, {
   auth: {
     UNAUTHORIZED: "Unauthorized",
-    TOKEN_EXPIRED: "Token expired",
+  },
+  general: {
+    UNKNOWN_ERROR: "Something went wrong",
   },
 });
-
-// Use in handlers
-throw ctxErr.auth.UNAUTHORIZED();
 ```
 
-### Logging
-
-Configure logging level to control console output:
+### Throw anywhere
 
 ```typescript
-// No logging
-const router = new CtxRouter<TCtx>({ logLevel: "none" });
-
-// Minimal: Method, Path, TraceId only
-const router = new CtxRouter<TCtx>({ logLevel: "minimal" });
-// Output: [GET /user/123] TraceId: abc-1
-
-// Standard (default): Essential info
-const router = new CtxRouter<TCtx>({ logLevel: "standard" });
-// Output: [GET /user/123] TraceId: abc-1 | UserId: user-456 | Seq: 1 | Inflight: 2
-
-// Verbose: All info including request data
-const router = new CtxRouter<TCtx>({ logLevel: "verbose" });
-// Output: [GET /user/123] IP: 127.0.0.1 | TraceId: abc-1 | SpanId: abc-1 | UserId: user-456 | UserSeq: 5 | Seq: 1 | Inflight: 2 | Data: {"userId":"123"}
+throw appErr.auth.UNAUTHORIZED({
+  data: { reason: "missing_token" },
+});
 ```
 
-### Role-Based Authorization
+Router errors and app errors are cleanly separated.
 
-```typescript
-export const USER_ROLE = {
-  user: "user",
-  admin: "admin",
-  server: "server",
-} as const;
+## Design guarantees
 
-export type TCtx = TDefaultCtx & {
-  user: {
-    role: Array<keyof typeof USER_ROLE>;
-  };
-};
+- Transport-agnostic
+- Pattern-first routing
+- Low cardinality by design
+- Linear, deterministic execution
+- No hidden parallelism
+- No framework lock-in
 
-// In your handler
-export async function auth(ctx: TCtx): Promise<TCtx> {
-  const allowedRoles = [USER_ROLE.user, USER_ROLE.admin];
-  if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
-  throw ctxErr.auth.UNAUTHORIZED();
-}
-```
+## When should you use ctx-router?
 
-## Use Cases
+Use it if you:
 
-### Migrating Frameworks
+- Share logic between HTTP + jobs
+- Want clean boundaries between transport and business logic
+- Care about observability and routing identity
+- Prefer explicit, boring execution models
 
-Start with Express, migrate to Fastify later without rewriting business logic.
+Do not use it if you want:
 
-### Multi-Cloud Deployment
+- Automatic DI
+- Controllers / decorators
+- Magic middleware behavior
 
-Deploy the same code to AWS Lambda, Google Cloud Functions, and Azure Functions.
+## Status
 
-### Hybrid Architecture
-
-Serve HTTP requests via Express and process async jobs via SQS with the same handlers.
-
-### Microservices
-
-Support HTTP, gRPC, and message queues without duplicating logic.
-
-### Testing
-
-Write tests against the unified context without mocking framework-specific objects.
-
-## API Reference
-
-### CtxRouter
-
-#### Constructor
-
-```typescript
-new CtxRouter<TCtx>(options?: {
-  logLevel?: "none" | "minimal" | "standard" | "verbose"
-})
-```
-
-**Default:** `logLevel: "standard"`
-
-#### Methods
-
-- `handle(config: { protocol: string; action?: string; pattern: string }, handler: IBaseApi<TCtx>)` - Register a route
-- `exec(ctx: TCtx): Promise<TCtx>` - Execute a route
-- `hookBeforeExec(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called before route execution
-- `hookAfterExec(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called after successful execution
-- `hookExecError(handler: (ctx: TCtx, error: unknown) => Promise<TCtx>)` - Hook called on execution error
-- `hookExecFinally(handler: (ctx: TCtx) => Promise<TCtx>)` - Hook called after execution (success or error)
-
-### Context Converters (toCtx)
-
-- `toCtx.fromExpress(req: Request)` - Convert Express request
-- `toCtx.fromLambda(event: APIGatewayProxyEvent)` - Convert Lambda event
-- `toCtx.fromSQS(record: SQSRecord)` - Convert SQS record
-- `toCtx.fromFastify(request: FastifyRequest)` - Convert Fastify request
-- Custom converters can be created for any transport
-
-## Examples
-
-See the [`/src/example`](./src/example) directory for complete working examples.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- First public release
+- API intentionally small
+- Focused on correctness over features
 
 ## License
 
-MIT - Kaushik R Bangera
-
-## Links
-
-- [npm Package](https://www.npmjs.com/package/ctx-router)
-- [GitHub Repository](https://github.com/NeuronEnix/ctx-router)
-- [Issues](https://github.com/NeuronEnix/ctx-router/issues)
+MIT © Kaushik R Bangera

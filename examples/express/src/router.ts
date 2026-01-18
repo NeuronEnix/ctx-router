@@ -44,11 +44,11 @@ const authMiddleware = async (ctx: TCtx): Promise<TCtx> => {
 };
 
 // Set your router
-const cr = new CtxRouter<TCtx>();
+export const router = new CtxRouter<TCtx>();
 // Health routes
-cr.route("GET /health/ping").to(api.health.ping);
+router.route("GET /health/ping").to(api.health.ping);
 // Chained through + to
-cr.route("GET /health/ping-log")
+router.route("GET /health/ping-log")
   .via(logMiddleware)
   .via(authMiddleware)
   .to(api.health.ping);
@@ -58,10 +58,8 @@ const userRateLimitMiddleware = async (ctx: TCtx): Promise<TCtx> => {
   return ctx;
 }
 // User routes with inherited middleware
-const userRouter = cr.route("user").via( userRateLimitMiddleware, logMiddleware);
+const userRouter = router.route("user").via( userRateLimitMiddleware, logMiddleware);
 userRouter.route("POST /update").to(api.user.update);
 
 userRouter.route("GET /:userId").to(api.user.detail);
 userRouter.route("detail").to(api.user.detail);
-
-export { cr as router };
