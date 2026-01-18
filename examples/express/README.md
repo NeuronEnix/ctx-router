@@ -161,5 +161,5 @@ curl http://localhost:3001/user/123
 ## Notes
 
 - This example installs `ctx-router` from the workspace (local version)
-- It only uses the public API - no internal imports
-- Ready to copy into production projects
+- It only uses the public API (`import ... from "ctx-router"`) — no internal imports
+- For local development, run `pnpm build -w` (or `pnpm build` after changes) so the example picks up updates from `../../dist`

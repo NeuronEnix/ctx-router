@@ -1,10 +1,5 @@
-import {
-  CtxRouter,
-  TDefaultCtx,
-  DEFAULT_USER_ROLE,
-  err,
-} from "../../../src";
-import type { err as ErrTypes } from "../../../src";
+import { CtxRouter, DEFAULT_USER_ROLE, err } from "ctx-router";
+import type { TDefaultCtx, err as ErrTypes } from "ctx-router";
 import * as api from "./api/index";
 
 const { CtxBaseError, ctxErrMap } = err;
