@@ -11,13 +11,13 @@ export type TCtx = TDefaultCtx & {
 export { DEFAULT_USER_ROLE };
 
 // Custom error class for this application
-class ResErr extends CtxBaseError {
+class AppErr extends CtxBaseError {
   constructor(e: TCtxBaseError) {
     super(e);
   }
 }
 
-export const resErr = ctxErrMap(ResErr, {
+export const appErr = ctxErrMap(AppErr, {
   general: {
     UNKNOWN_ERROR: "Something went wrong",
     RESPONSE_NOT_SET: "Response not set",

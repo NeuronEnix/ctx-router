@@ -1,4 +1,4 @@
-import { TCtx, DEFAULT_USER_ROLE, resErr } from "../../router";
+import { TCtx, DEFAULT_USER_ROLE, appErr } from "../../router";
 
 export async function execute(reqData: TReqData): Promise<TResData> {
   return {
@@ -17,7 +17,7 @@ export async function auth(ctx: TCtx): Promise<TCtx> {
     DEFAULT_USER_ROLE.admin,
   ];
   if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
-  throw resErr.auth.UNAUTHORIZED();
+  throw appErr.auth.UNAUTHORIZED();
 }
 
 export async function validate(_ctx: TCtx): Promise<TReqData> {
