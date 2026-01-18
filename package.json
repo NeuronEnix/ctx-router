@@ -1,6 +1,6 @@
 {
   "name": "ctx-router",
-  "version": "1.0.8",
+  "version": "0.1.0",
   "description": "Framework-agnostic router for building portable APIs. Write your business logic once, run it on Express, Lambda, SQS, gRPC, or any transport layer.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
