@@ -1,6 +1,5 @@
 import { MatchFunction } from "path-to-regexp";
 import { TDefaultCtx } from "../core";
-import { CtxError } from "./error";
 
 export type TRoute<TContext extends TDefaultCtx> = {
   op?: string; // Optional: HTTP method, event name, etc.
@@ -20,10 +19,7 @@ export type THooks<TContext extends TDefaultCtx> = {
   // Exec lifecycle hooks (outer) - wraps routing + handler
   onExecBefore: (ctx: TContext) => void | Promise<void>;
   onExecAfter: (ctx: TContext) => void | Promise<void>;
-  onExecError: (
-    ctx: TContext,
-    error: CtxError | Error | unknown
-  ) => void | Promise<void>;
+  onExecError: (ctx: TContext, error: Error | unknown) => void | Promise<void>;
   onExecFinally: (ctx: TContext) => void | Promise<void>;
 
   // Handler lifecycle hooks (inner) - wraps user's business logic
@@ -31,7 +27,7 @@ export type THooks<TContext extends TDefaultCtx> = {
   onHandlerAfter: (ctx: TContext) => void | Promise<void>;
   onHandlerError: (
     ctx: TContext,
-    error: CtxError | Error | unknown
+    error: Error | unknown
   ) => void | Promise<void>;
   onHandlerFinally: (ctx: TContext) => void | Promise<void>;
 };

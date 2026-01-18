@@ -1,9 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { CtxError, ctxErrMap } from "../src/router/error";
+import { CtxBaseError, TCtxBaseError, ctxErrMap } from "../src/router/error";
 
-describe("CtxError", () => {
+// Test error class
+class TestError extends CtxBaseError {
+  constructor(e: TCtxBaseError) {
+    super(e);
+  }
+}
+
+describe("CtxBaseError", () => {
   it("sets name and message from constructor", () => {
-    const error = new CtxError({
+    const error = new TestError({
       name: "TEST_ERROR",
       msg: "Test error message",
     });
@@ -13,7 +20,7 @@ describe("CtxError", () => {
   });
 
   it("sets data when provided", () => {
-    const error = new CtxError({
+    const error = new TestError({
       name: "TEST_ERROR",
       msg: "Test error",
       data: { field: "email", value: "invalid" },
@@ -23,7 +30,7 @@ describe("CtxError", () => {
   });
 
   it("defaults data to empty object when not provided", () => {
-    const error = new CtxError({
+    const error = new TestError({
       name: "TEST_ERROR",
       msg: "Test error",
     });
@@ -32,7 +39,7 @@ describe("CtxError", () => {
   });
 
   it("sets info when provided", () => {
-    const error = new CtxError({
+    const error = new TestError({
       name: "TEST_ERROR",
       msg: "Test error",
       info: { userId: 123, timestamp: 1234567890 },
@@ -42,7 +49,7 @@ describe("CtxError", () => {
   });
 
   it("extends Error class", () => {
-    const error = new CtxError({
+    const error = new TestError({
       name: "TEST_ERROR",
       msg: "Test error",
     });
@@ -53,7 +60,7 @@ describe("CtxError", () => {
 });
 
 describe("ctxErrMap", () => {
-  const ctxErr = ctxErrMap({
+  const ctxErr = ctxErrMap(TestError, {
     auth: {
       UNAUTHORIZED: "User is not authorized",
       TOKEN_EXPIRED: "Token has expired",
@@ -74,10 +81,10 @@ describe("ctxErrMap", () => {
     expect(typeof ctxErr.validation.INVALID_EMAIL).toBe("function");
   });
 
-  it("factory returns CtxError with correct name and default message", () => {
+  it("factory returns TestError with correct name and default message", () => {
     const error = ctxErr.auth.UNAUTHORIZED();
 
-    expect(error).toBeInstanceOf(CtxError);
+    expect(error).toBeInstanceOf(TestError);
     expect(error.name).toBe("UNAUTHORIZED");
     expect(error.message).toBe("User is not authorized");
   });

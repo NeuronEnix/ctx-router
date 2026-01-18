@@ -2,7 +2,7 @@ import { CtxMeta } from "./meta";
 import { CtxReq } from "./req";
 import { CtxRes } from "./res";
 import { CtxUser } from "./user";
-import { CtxError } from "../router/error";
+import { CtxBaseError } from "../router/error";
 
 // Export types
 export type { CtxMeta } from "./meta";
@@ -21,7 +21,7 @@ export type TDefaultCtx = {
   id: string;
   req: CtxReq;
   res: CtxRes;
-  err: CtxError | null;
+  err: CtxBaseError | null;
   user: CtxUser;
   meta: CtxMeta;
   locals: Record<string, unknown>;

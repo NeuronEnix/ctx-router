@@ -1,16 +1,28 @@
 import {
   CtxRouter,
   TDefaultCtx,
-  ctxErrMap,
   DEFAULT_USER_ROLE,
+  err,
 } from "../../../src";
+import type { err as ErrTypes } from "../../../src";
 import * as api from "./api/index";
+
+const { CtxBaseError, ctxErrMap } = err;
+type TCtxBaseError = ErrTypes.TCtxBaseError;
 
 export type TCtx = TDefaultCtx & {
   user: { role: (keyof typeof DEFAULT_USER_ROLE)[] };
 };
 export { DEFAULT_USER_ROLE };
-export const ctxErr = ctxErrMap({
+
+// Custom error class for this application
+class ResErr extends CtxBaseError {
+  constructor(e: TCtxBaseError) {
+    super(e);
+  }
+}
+
+export const resErr = ctxErrMap(ResErr, {
   general: {
     UNKNOWN_ERROR: "Something went wrong",
     RESPONSE_NOT_SET: "Response not set",

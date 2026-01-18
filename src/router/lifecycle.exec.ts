@@ -1,5 +1,5 @@
 import { THooks } from "./types";
-import { CtxError } from "./error";
+import { ctxRouterErr } from "./error";
 import { TDefaultCtx } from "../core";
 import { updateStatsIfStale } from "../common/helper";
 import {
@@ -160,13 +160,10 @@ export async function exec<TContext extends TDefaultCtx>(
     }
 
     // No match found
-    throw new CtxError({
-      name: "HANDLER_NOT_FOUND",
-      msg: "Handler not found",
+    throw ctxRouterErr.handler.HANDLER_NOT_FOUND({
+      msg: `Handler not found for route: ${rawKey}`,
       data: {
         route: rawKey,
-        op: op || "none",
-        raw,
       },
     });
   } catch (execError) {
