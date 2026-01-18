@@ -25,10 +25,6 @@ function createDefaultHooks<TContext extends TDefaultCtx>(
     onExecAfter: noop,
     onExecError: defaultHookOnExecError,
     onExecFinally: noop,
-    onHandlerBefore: noop,
-    onHandlerAfter: noop,
-    onHandlerError: noop,
-    onHandlerFinally: noop,
   };
 }
 
@@ -109,28 +105,6 @@ export class CtxRouter<TContext extends TDefaultCtx> {
         finally: (fn) => {
           this.assertNotSealed();
           this.hooks.onExecFinally = fn;
-          return this;
-        },
-      },
-      onHandler: {
-        before: (fn) => {
-          this.assertNotSealed();
-          this.hooks.onHandlerBefore = fn;
-          return this;
-        },
-        after: (fn) => {
-          this.assertNotSealed();
-          this.hooks.onHandlerAfter = fn;
-          return this;
-        },
-        error: (fn) => {
-          this.assertNotSealed();
-          this.hooks.onHandlerError = fn;
-          return this;
-        },
-        finally: (fn) => {
-          this.assertNotSealed();
-          this.hooks.onHandlerFinally = fn;
           return this;
         },
       },
@@ -267,17 +241,14 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   /**
    * Registers the handler for this route. Terminal - no chaining.
    * Middleware (via) runs first, then this handler.
-   * Returns Promise<TContext> for type inference with handler.
+   * Returns void.
    */
-  public to(
-    handler: (ctx: TContext) => TContext | Promise<TContext>
-  ): Promise<TContext> {
+  public to(handler: (ctx: TContext) => TContext | Promise<TContext>): void {
     if (typeof handler !== "function") {
       throw new Error("Router.to() requires a function");
     }
     this.handler = handler;
     this.registerRoute();
-    return undefined as unknown as Promise<TContext>;
   }
 
   /**

@@ -449,23 +449,6 @@ describe("CtxRouter", () => {
       expect(hookCalled).toBe(true);
     });
 
-    it("calls onHandlerBefore hook", async () => {
-      let hookCalled = false;
-
-      router.hook.onHandler.before(async () => {
-        hookCalled = true;
-      });
-
-      router.route("GET /test").to(async (ctx) => ctx);
-
-      const ctx = router.newCtx();
-      setRoute(ctx, "GET", "/test");
-
-      await router.exec(ctx);
-
-      expect(hookCalled).toBe(true);
-    });
-
     it("hooks are sealed after first exec", async () => {
       router.route("test").to(async (ctx) => ctx);
 
@@ -531,9 +514,6 @@ describe("CtxRouter", () => {
       router.hook.onExec.before(async () => events.push("execBefore"));
       router.hook.onExec.after(async () => events.push("execAfter"));
       router.hook.onExec.finally(async () => events.push("execFinally"));
-      router.hook.onHandler.before(async () => events.push("handlerBefore"));
-      router.hook.onHandler.after(async () => events.push("handlerAfter"));
-      router.hook.onHandler.finally(async () => events.push("handlerFinally"));
 
       router.route("test").to(async (ctx) => {
         events.push("handler");
@@ -547,10 +527,7 @@ describe("CtxRouter", () => {
 
       expect(events).toEqual([
         "execBefore",
-        "handlerBefore",
         "handler",
-        "handlerAfter",
-        "handlerFinally",
         "execAfter",
         "execFinally",
       ]);

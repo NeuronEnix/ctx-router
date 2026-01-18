@@ -21,15 +21,6 @@ export type THooks<TContext extends TDefaultCtx> = {
   onExecAfter: (ctx: TContext) => void | Promise<void>;
   onExecError: (ctx: TContext, error: Error | unknown) => void | Promise<void>;
   onExecFinally: (ctx: TContext) => void | Promise<void>;
-
-  // Handler lifecycle hooks (inner) - wraps user's business logic
-  onHandlerBefore: (ctx: TContext) => void | Promise<void>;
-  onHandlerAfter: (ctx: TContext) => void | Promise<void>;
-  onHandlerError: (
-    ctx: TContext,
-    error: Error | unknown
-  ) => void | Promise<void>;
-  onHandlerFinally: (ctx: TContext) => void | Promise<void>;
 };
 
 // Hook DSL type for fluent API (forward reference resolved by CtxRouter import)
@@ -39,12 +30,6 @@ export type THookDSL<TContext extends TDefaultCtx, TRouter> = {
     after(fn: THooks<TContext>["onExecAfter"]): TRouter;
     error(fn: THooks<TContext>["onExecError"]): TRouter;
     finally(fn: THooks<TContext>["onExecFinally"]): TRouter;
-  };
-  onHandler: {
-    before(fn: THooks<TContext>["onHandlerBefore"]): TRouter;
-    after(fn: THooks<TContext>["onHandlerAfter"]): TRouter;
-    error(fn: THooks<TContext>["onHandlerError"]): TRouter;
-    finally(fn: THooks<TContext>["onHandlerFinally"]): TRouter;
   };
 };
 

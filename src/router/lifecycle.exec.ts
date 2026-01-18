@@ -90,27 +90,10 @@ export async function exec<TContext extends TDefaultCtx>(
       // Exact match found - populate context and execute
       ctx.req.route.pattern = exactMatch.route.pattern;
 
-      // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
-      try {
-        // 3. HANDLER BEFORE
-        await hooks.onHandlerBefore(ctx);
+      // 3. USER'S BUSINESS LOGIC
+      ctx = await exactMatch.route.handler(ctx);
 
-        // 4. USER'S BUSINESS LOGIC
-        const result = await exactMatch.route.handler(ctx);
-
-        // 5. HANDLER AFTER (success)
-        await hooks.onHandlerAfter(result);
-        ctx = result;
-      } catch (handlerError) {
-        // 6. HANDLER ERROR (handler-specific errors)
-        // Side-effect hook: mutates ctx in place, no return
-        await hooks.onHandlerError(ctx, handlerError);
-      } finally {
-        // 7. HANDLER FINALLY (always runs after handler)
-        await hooks.onHandlerFinally(ctx);
-      }
-
-      // 8. EXEC AFTER - Runs at end of try block (after handler completes)
+      // 4. EXEC AFTER - Runs at end of try block (after handler completes)
       await hooks.onExecAfter(ctx);
       return ctx;
     }
@@ -134,27 +117,10 @@ export async function exec<TContext extends TDefaultCtx>(
       ctx.req.data = { ...matchedParams, ...ctx.req.data };
       ctx.req.route.pattern = route.pattern;
 
-      // HANDLER LIFECYCLE: Inner try/catch/finally (around user's logic)
-      try {
-        // 3. HANDLER BEFORE
-        await hooks.onHandlerBefore(ctx);
+      // 3. USER'S BUSINESS LOGIC
+      ctx = await route.handler(ctx);
 
-        // 4. USER'S BUSINESS LOGIC
-        const handlerResult = await route.handler(ctx);
-
-        // 5. HANDLER AFTER (success)
-        await hooks.onHandlerAfter(handlerResult);
-        ctx = handlerResult;
-      } catch (handlerError) {
-        // 6. HANDLER ERROR (handler-specific errors)
-        // Side-effect hook: mutates ctx in place, no return
-        await hooks.onHandlerError(ctx, handlerError);
-      } finally {
-        // 7. HANDLER FINALLY (always runs after handler)
-        await hooks.onHandlerFinally(ctx);
-      }
-
-      // 8. EXEC AFTER - Runs at end of try block (after handler completes)
+      // 4. EXEC AFTER - Runs at end of try block (after handler completes)
       await hooks.onExecAfter(ctx);
       return ctx;
     }
