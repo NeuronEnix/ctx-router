@@ -102,6 +102,7 @@ export function enrichFromExpress(
 
   ctx.req.transport = {
     protocol: "http",
+    framework: "express",
     request: {
       method,
       path,

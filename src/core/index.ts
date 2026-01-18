@@ -21,8 +21,8 @@ export type TDefaultCtx = {
   id: string;
   req: CtxReq;
   res: CtxRes;
-  err: CtxBaseError | null;
   user: CtxUser;
   meta: CtxMeta;
   locals: Record<string, unknown>;
+  err: CtxBaseError | null;
 };

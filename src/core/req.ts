@@ -106,6 +106,7 @@ export type CtxReq<Data = Record<string, unknown>> = {
       | "internal"
       | string;
 
+    framework?: "express" | "fastify" | "lambda" | string;
     /**
      * Protocol-level addressing or operation info.
      */
