@@ -310,9 +310,9 @@ describe("CtxRouter", () => {
       const ctx = router.newCtx();
       setRoute(ctx, "POST", "/test");
 
-      await router.exec(ctx);
-
-      expect(ctx.res.code).toBe("HANDLER_NOT_FOUND");
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
     });
   });
 
@@ -343,19 +343,19 @@ describe("CtxRouter", () => {
       const ctx = router.newCtx();
       setRoute(ctx, "GET", "/unknown");
 
-      await router.exec(ctx);
-
-      expect(ctx.res.code).toBe("HANDLER_NOT_FOUND");
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
     });
 
     it("includes route info in error data", async () => {
       const ctx = router.newCtx();
       setRoute(ctx, "GET", "/nonexistent");
 
-      await router.exec(ctx);
-
-      expect(ctx.res.code).toBe("HANDLER_NOT_FOUND");
-      expect(ctx.err).toBeDefined();
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+        data: { route: "GET /nonexistent" },
+      });
     });
   });
 

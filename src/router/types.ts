@@ -14,21 +14,42 @@ export type TRouteEntry<TContext extends TDefaultCtx> = {
 };
 
 // Side-effect hooks - mutate ctx directly, no return needed
+export type TOnExecBefore<TContext extends TDefaultCtx> = (
+  ctx: TContext
+) => void | Promise<void>;
+
+export type TOnExecAfter<TContext extends TDefaultCtx> = (
+  ctx: TContext
+) => void | Promise<void>;
+
+export type TOnExecError<TContext extends TDefaultCtx> = (
+  ctx: TContext,
+  error: Error | unknown
+) => void | Promise<void>;
+
+export type TOnExecFinally<TContext extends TDefaultCtx> = (
+  ctx: TContext
+) => void | Promise<void>;
+
 export type THooks<TContext extends TDefaultCtx> = {
   // Exec lifecycle hooks (outer) - wraps routing + handler
-  onExecBefore: (ctx: TContext) => void | Promise<void>;
-  onExecAfter: (ctx: TContext) => void | Promise<void>;
-  onExecError: (ctx: TContext, error: Error | unknown) => void | Promise<void>;
-  onExecFinally: (ctx: TContext) => void | Promise<void>;
+  onExecBefore?: TOnExecBefore<TContext>;
+  onExecAfter?: TOnExecAfter<TContext>;
+  /**
+   * If present, the router will call this hook and RETURN `ctx` from exec().
+   * If absent, the router will RE-THROW the caught error.
+   */
+  onExecError?: TOnExecError<TContext>;
+  onExecFinally?: TOnExecFinally<TContext>;
 };
 
 // Hook DSL type for fluent API (forward reference resolved by CtxRouter import)
 export type THookDSL<TContext extends TDefaultCtx, TRouter> = {
   onExec: {
-    before(fn: THooks<TContext>["onExecBefore"]): TRouter;
-    after(fn: THooks<TContext>["onExecAfter"]): TRouter;
-    error(fn: THooks<TContext>["onExecError"]): TRouter;
-    finally(fn: THooks<TContext>["onExecFinally"]): TRouter;
+    before(fn: TOnExecBefore<TContext>): TRouter;
+    after(fn: TOnExecAfter<TContext>): TRouter;
+    error(fn: TOnExecError<TContext>): TRouter;
+    finally(fn: TOnExecFinally<TContext>): TRouter;
   };
 };
 

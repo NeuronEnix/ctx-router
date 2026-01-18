@@ -11,17 +11,9 @@ import {
 import { TRouterInstance, createRouterInstance } from "./instance";
 import { exec as execImpl } from "./lifecycle.exec";
 
-// No-op hook for defaults
-const noop = async () => {};
-
 // Factory for creating default hooks
 function createDefaultHooks<TContext extends TDefaultCtx>(): THooks<TContext> {
-  return {
-    onExecBefore: noop,
-    onExecAfter: noop,
-    onExecError: noop,
-    onExecFinally: noop,
-  };
+  return {};
 }
 
 export class CtxRouter<TContext extends TDefaultCtx> {

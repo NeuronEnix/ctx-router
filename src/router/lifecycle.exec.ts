@@ -76,7 +76,7 @@ export async function exec<TContext extends TDefaultCtx>(
   try {
     // 1. EXEC BEFORE - Runs FIRST (context prep, before routing)
     // Side-effect hook: mutates ctx in place, no return
-    await hooks.onExecBefore(ctx);
+    await hooks.onExecBefore?.(ctx);
 
     // 2. Route matching (protocol-agnostic, op + pattern based)
     const { op, raw } = ctx.req.route;
@@ -94,7 +94,7 @@ export async function exec<TContext extends TDefaultCtx>(
       ctx = await exactMatch.route.handler(ctx);
 
       // 4. EXEC AFTER - Runs at end of try block (after handler completes)
-      await hooks.onExecAfter(ctx);
+      await hooks.onExecAfter?.(ctx);
       return ctx;
     }
 
@@ -121,7 +121,7 @@ export async function exec<TContext extends TDefaultCtx>(
       ctx = await route.handler(ctx);
 
       // 4. EXEC AFTER - Runs at end of try block (after handler completes)
-      await hooks.onExecAfter(ctx);
+      await hooks.onExecAfter?.(ctx);
       return ctx;
     }
 
@@ -132,14 +132,19 @@ export async function exec<TContext extends TDefaultCtx>(
         route: rawKey,
       },
     });
-  } catch (execError) {
+  } catch (execError: unknown) {
     // 9. EXEC ERROR - Catches routing errors, HANDLER_NOT_FOUND, or re-thrown errors
     // Side-effect hook: mutates ctx in place, no return
-    await hooks.onExecError(ctx, execError);
-    return ctx;
+    if (hooks.onExecError) {
+      await hooks.onExecError(ctx, execError);
+      return ctx;
+    }
+
+    // If user did not register an error hook, re-throw the error (fail fast).
+    throw execError;
   } finally {
     // 10. EXEC FINALLY - Always runs (cleanup, metrics)
-    await hooks.onExecFinally(ctx);
+    await hooks.onExecFinally?.(ctx);
 
     // END LOGIC: Set final timestamps and response meta, decrement inflight
     const outTime = Date.now();
