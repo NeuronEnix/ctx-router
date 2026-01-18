@@ -93,7 +93,8 @@ describe("CtxRouter", () => {
     it("accepts optional protocol parameter", () => {
       const ctx = router.newCtx("kafka");
 
-      expect(ctx.req.transport.protocol).toBe("kafka");
+      expect(ctx.req.transport).toBeDefined();
+      expect(ctx.req.transport!.protocol).toBe("kafka");
     });
   });
 
@@ -511,9 +512,15 @@ describe("CtxRouter", () => {
     it("calls all hook types in correct order", async () => {
       const events: string[] = [];
 
-      router.hook.onExec.before(async () => events.push("execBefore"));
-      router.hook.onExec.after(async () => events.push("execAfter"));
-      router.hook.onExec.finally(async () => events.push("execFinally"));
+      router.hook.onExec.before(() => {
+        events.push("execBefore");
+      });
+      router.hook.onExec.after(() => {
+        events.push("execAfter");
+      });
+      router.hook.onExec.finally(() => {
+        events.push("execFinally");
+      });
 
       router.route("test").to(async (ctx) => {
         events.push("handler");

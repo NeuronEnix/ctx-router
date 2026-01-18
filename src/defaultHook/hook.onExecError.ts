@@ -1,0 +1,44 @@
+import { ctxRouterErr, CtxBaseError } from "../router/error";
+import { TDefaultCtx } from "../core";
+
+// Side-effect hook: mutates ctx in place, no return
+export async function defaultHookOnExecError<TContext extends TDefaultCtx>(
+  ctx: TContext,
+  e: CtxBaseError | Error | unknown
+): Promise<void> {
+  if (e instanceof CtxBaseError) {
+    console.log("CtxError:name:", e.name);
+    console.log("CtxError:message:", e.message);
+    console.log("CtxError:data:", e.data);
+    if (e.info) {
+      if (typeof e.info === "object") {
+        console.log("CtxError:info:object:", JSON.stringify(e.info));
+      } else {
+        console.log("CtxError:info:", e.info);
+      }
+    }
+    if (e.stack) {
+      console.log("CtxError:stack:", e.stack);
+    }
+
+    // Store error in ctx.err for internal tracking
+    ctx.err = e;
+
+    // Set response (client-safe data only)
+    ctx.res = { code: e.name, msg: e.message, data: e.data };
+    return;
+  }
+
+  // ideally should never come here, god forbid it did
+  console.log("CtxError:UNKNOWN_ERROR:FATAL", e);
+  const error = ctxRouterErr.general.UNKNOWN_ERROR();
+
+  // Store error in ctx.err
+  ctx.err = error;
+
+  ctx.res = {
+    code: error.name,
+    msg: error.message,
+    data: {},
+  };
+}
