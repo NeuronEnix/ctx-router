@@ -1,6 +1,4 @@
 import { match as pathMatch } from "path-to-regexp";
-import { defaultHookOnExecBefore } from "../defaultHook/hook.onExecBefore";
-import { defaultHookOnExecError } from "../defaultHook/hook.onExecError";
 import { TDefaultCtx } from "../core";
 import {
   TRoute,
@@ -17,13 +15,11 @@ import { exec as execImpl } from "./lifecycle.exec";
 const noop = async () => {};
 
 // Factory for creating default hooks
-function createDefaultHooks<TContext extends TDefaultCtx>(
-  logLevel: LogLevel
-): THooks<TContext> {
+function createDefaultHooks<TContext extends TDefaultCtx>(): THooks<TContext> {
   return {
-    onExecBefore: defaultHookOnExecBefore(logLevel),
+    onExecBefore: noop,
     onExecAfter: noop,
-    onExecError: defaultHookOnExecError,
+    onExecError: noop,
     onExecFinally: noop,
   };
 }
@@ -70,7 +66,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     this.instance = createRouterInstance();
 
     // Use shared hooks if provided (from parent via .on()), else create new
-    this.hooks = sharedHooks ?? createDefaultHooks(this.logLevel);
+    this.hooks = sharedHooks ?? createDefaultHooks();
 
     // Create hook DSL once (stable reference, no getter)
     this.hook = this.createHookDSL();
@@ -284,17 +280,16 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       this.segments
     );
 
-    // 2. Build primary pattern (always) - uses "." separator
+    // 2. Build primary pattern (always)
     const pattern = this.buildPattern(nonHttpSegments, false);
     const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
     // 3. Build primary route
     const route: TRoute<TContext> = {
       pattern,
-      separator: ".",
       matcher,
       handler: composedHandler,
-    } as TRoute<TContext>;
+    };
 
     if (hasHttp && httpOp) {
       route.op = httpOp;
@@ -302,7 +297,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
     this.addRouteToStorage(route, this.segments);
 
-    // 4. If HTTP grammar detected, register HTTP route too (uses "/" separator)
+    // 4. If HTTP grammar detected, register HTTP route too
     if (hasHttp && httpOp) {
       const httpPattern = this.buildHttpPattern(nonHttpSegments);
       const httpMatcher = pathMatch(httpPattern, {
@@ -312,7 +307,6 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       const httpRoute: TRoute<TContext> = {
         op: httpOp,
         pattern: httpPattern,
-        separator: "/",
         matcher: httpMatcher,
         handler: composedHandler,
       };

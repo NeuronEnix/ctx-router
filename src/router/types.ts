@@ -4,7 +4,6 @@ import { TDefaultCtx } from "../core";
 export type TRoute<TContext extends TDefaultCtx> = {
   op?: string; // Optional: HTTP method, event name, etc.
   pattern: string; // Pattern with :params (identity)
-  separator: "." | "/"; // Track separator for logging/debugging
   matcher: MatchFunction<object>; // Compiled regex from path-to-regexp
   handler: (ctx: TContext) => Promise<TContext>;
 };
