@@ -44,7 +44,9 @@ const authMiddleware = async (ctx: TCtx): Promise<TCtx> => {
 };
 
 // Set your router
-export const router = new CtxRouter<TCtx>();
+export const router = new CtxRouter<TCtx>({
+  serviceName: "my-example-service",
+});
 // Health routes
 router.route("GET /health/ping").to(api.health.ping);
 // Chained through + to

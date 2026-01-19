@@ -107,7 +107,7 @@ describe("CtxRouter", () => {
 
     it("route() throws on empty segment", () => {
       expect(() => router.route("")).toThrow(
-        "Router.on() requires a non-empty string segment"
+        "Router.route() requires a non-empty string segment"
       );
     });
 

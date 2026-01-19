@@ -10,6 +10,7 @@ import {
 } from "./types";
 import { TRouterInstance, createRouterInstance } from "./instance";
 import { exec as execImpl } from "./lifecycle.exec";
+import { ctxRouterErr } from "./error";
 
 // Factory for creating default hooks
 function createDefaultHooks<TContext extends TDefaultCtx>(): THooks<TContext> {
@@ -32,7 +33,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   public exactRoutes = new Map<string, TRouteEntry<TContext>>();
   public paramRoutes: TRouteEntry<TContext>[] = [];
 
-  // Hook state (shared across scoped routers)
+  // Hook state (per router instance)
   private hooks: THooks<TContext>;
 
   // Sealing flag - prevents hook modification after first exec
@@ -52,13 +53,13 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     return { ...this.instance };
   }
 
-  constructor(config: CtxRouterConfig = {}, sharedHooks?: THooks<TContext>) {
+  constructor(config: CtxRouterConfig = {}) {
     this.logLevel = config.logLevel ?? "standard";
     this.statsEnabled = config.statsEnabled ?? true;
-    this.instance = createRouterInstance();
+    this.instance = createRouterInstance(config.serviceName);
 
-    // Use shared hooks if provided (from parent via .on()), else create new
-    this.hooks = sharedHooks ?? createDefaultHooks();
+    // Always create hooks for this router instance
+    this.hooks = createDefaultHooks();
 
     // Create hook DSL once (stable reference, no getter)
     this.hook = this.createHookDSL();
@@ -67,7 +68,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   // Prevents hook modification after first exec
   private assertNotSealed(): void {
     if (this.sealed) {
-      throw new Error("Hooks must be registered during startup, before exec()");
+      throw ctxRouterErr.hook.HOOKS_ALREADY_SEALED();
     }
   }
 
@@ -183,20 +184,20 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
   /**
    * Creates a scoped router with an additional segment prefix.
-   * Returns a new router instance that shares storage and hooks with the parent.
+   * Returns a new router instance that shares route storage with the parent.
    */
   public route(
     segment: string
   ): Pick<CtxRouter<TContext>, "route" | "via" | "to"> {
     if (typeof segment !== "string" || segment.length === 0) {
-      throw new Error("Router.on() requires a non-empty string segment");
+      throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
     }
 
-    // Create new scoped router with shared hooks
-    const scoped = new CtxRouter<TContext>(
-      { logLevel: this.logLevel, statsEnabled: this.statsEnabled },
-      this.hooks // Pass shared hooks state
-    );
+    // Create new scoped router (shares route storage; has its own hooks)
+    const scoped = new CtxRouter<TContext>({
+      logLevel: this.logLevel,
+      statsEnabled: this.statsEnabled,
+    });
 
     // Copy segment chain and middleware
     scoped.segments = [...this.segments, segment];
@@ -219,7 +220,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   ): Pick<CtxRouter<TContext>, "route" | "via" | "to"> {
     for (const fn of fns) {
       if (typeof fn !== "function") {
-        throw new Error("Router.via() requires function arguments");
+        throw ctxRouterErr.router.INVALID_MIDDLEWARE();
       }
       this.middleware.push(fn);
     }
@@ -233,7 +234,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    */
   public to(handler: (ctx: TContext) => TContext | Promise<TContext>): void {
     if (typeof handler !== "function") {
-      throw new Error("Router.to() requires a function");
+      throw ctxRouterErr.router.INVALID_HANDLER();
     }
     this.handler = handler;
     this.registerRoute();
@@ -244,15 +245,11 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    */
   private registerRoute(): void {
     if (this.segments.length === 0) {
-      throw new Error(
-        "Cannot register handler without segments. Use .route(segment) first."
-      );
+      throw ctxRouterErr.router.MISSING_SEGMENTS();
     }
 
     if (!this.handler) {
-      throw new Error(
-        "Cannot register route without handler. Use .to(handler)."
-      );
+      throw ctxRouterErr.router.MISSING_HANDLER();
     }
 
     // Compose: middleware chain → handler

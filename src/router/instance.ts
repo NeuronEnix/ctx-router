@@ -8,19 +8,17 @@ export type TRouterInstance = {
   SEQ: number;
   INFLIGHT: number;
   LAST_HEARTBEAT: number;
-  PORT: number;
 };
 
-export function createRouterInstance(): TRouterInstance {
+export function createRouterInstance(serviceName?: string): TRouterInstance {
   return {
     ID: crypto.randomBytes(5).toString("hex"),
     TRACE_ID: crypto.randomBytes(5).toString("hex"),
     CREATED_AT: Date.now(),
-    SERVICE_NAME: process.env["SERVICE_NAME"] || "ctx-service",
+    SERVICE_NAME: serviceName ?? "ctx-service",
     SEQ: 0,
     INFLIGHT: 0,
     LAST_HEARTBEAT: Date.now(),
-    PORT: parseInt(process.env["SERVICE_PORT"] || "3000", 10),
   };
 }
 

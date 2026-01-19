@@ -343,6 +343,18 @@ export const ctxRouterErr = ctxErrMap(CtxRouterError, {
   general: {
     UNKNOWN_ERROR: "Something went wrong",
   },
+  hook: {
+    HOOKS_ALREADY_SEALED:
+      "Hooks must be registered during startup, before exec()",
+  },
+  router: {
+    INVALID_ROUTE_SEGMENT: "Router.route() requires a non-empty string segment",
+    INVALID_MIDDLEWARE: "Router.via() requires function arguments",
+    INVALID_HANDLER: "Router.to() requires a function",
+    MISSING_SEGMENTS:
+      "Cannot register handler without segments. Use .route(segment) first.",
+    MISSING_HANDLER: "Cannot register route without handler. Use .to(handler).",
+  },
   handler: {
     HANDLER_NOT_FOUND: "Handler not found",
   },

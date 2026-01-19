@@ -60,6 +60,10 @@ export type TMiddleware<TContext extends TDefaultCtx> = (
 ) => TContext | Promise<TContext>;
 
 export type CtxRouterConfig = {
+  /**
+   * Service name injected into `ctx.meta.serviceName`.
+   */
+  serviceName?: string;
   logLevel?: LogLevel;
   /**
    * Enable or disable stats collection (CPU/memory metrics).
