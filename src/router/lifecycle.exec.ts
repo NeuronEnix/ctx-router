@@ -143,9 +143,6 @@ export async function exec<TContext extends TDefaultCtx>(
     // If user did not register an error hook, re-throw the error (fail fast).
     throw execError;
   } finally {
-    // 10. EXEC FINALLY - Always runs (cleanup, metrics)
-    await hooks.onExecFinally?.(ctx);
-
     // END LOGIC: Set final timestamps and response meta, decrement inflight
     const outTime = Date.now();
     const execTime = outTime - ctx.meta.ts.in;
@@ -160,5 +157,6 @@ export async function exec<TContext extends TDefaultCtx>(
     };
 
     decrementInflight(instance);
+    await hooks.onExecFinally?.(ctx);
   }
 }

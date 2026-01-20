@@ -151,7 +151,6 @@ src/
 ├── common/
 │   ├── const.ts           # Constants (STATS_INTERVAL_MS, STATS)
 │   └── helper.ts          # Helper functions (updateStatsIfStale)
-├── defaultHook/
 │   ├── hook.onExecBefore.ts  # Default pre-execution hook
 │   └── hook.onExecError.ts   # Default error handler
 └── index.ts               # Main export file
