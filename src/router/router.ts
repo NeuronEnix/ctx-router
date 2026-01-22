@@ -43,7 +43,6 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   public readonly hook: THookDSL<TContext, CtxRouter<TContext>>;
 
   public logLevel: LogLevel;
-  public statsEnabled: boolean;
 
   // Router-level INSTANCE
   private readonly instance: TRouterInstance;
@@ -55,7 +54,6 @@ export class CtxRouter<TContext extends TDefaultCtx> {
 
   constructor(config: CtxRouterConfig = {}) {
     this.logLevel = config.logLevel ?? "standard";
-    this.statsEnabled = config.statsEnabled ?? true;
     this.instance = createRouterInstance(config.serviceName);
 
     // Always create hooks for this router instance
@@ -177,8 +175,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       ctx,
       this, // Pass router instance instead of routes array
       this.hooks,
-      this.instance,
-      this.statsEnabled
+      this.instance
     );
   }
 
@@ -196,7 +193,6 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     // Create new scoped router (shares route storage; has its own hooks)
     const scoped = new CtxRouter<TContext>({
       logLevel: this.logLevel,
-      statsEnabled: this.statsEnabled,
     });
 
     // Copy segment chain and middleware

@@ -19,20 +19,16 @@ import type { CtxRouter } from "./router";
  * @param router - Router instance with route storage
  * @param hooks - Hook functions to run during execution
  * @param instance - Router instance for metrics
- * @param statsEnabled - Whether to update CPU/memory stats (default: true)
  * @returns The updated context after execution
  */
 export async function exec<TContext extends TDefaultCtx>(
   ctx: TContext,
   router: CtxRouter<TContext>,
   hooks: THooks<TContext>,
-  instance: TRouterInstance,
-  statsEnabled = true
+  instance: TRouterInstance
 ): Promise<TContext> {
   // Update stats lazily (only during traffic, not on background timer)
-  if (statsEnabled) {
-    updateStatsIfStale();
-  }
+  updateStatsIfStale();
 
   // BEGIN LOGIC: Increment inflight, set seq and timing
   const inTime = Date.now();

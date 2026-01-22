@@ -564,50 +564,6 @@ describe("CtxRouter", () => {
       });
     });
 
-    describe("statsEnabled", () => {
-      it("defaults to true", () => {
-        const defaultRouter = new CtxRouter<TDefaultCtx>();
-        expect(defaultRouter.statsEnabled).toBe(true);
-      });
-
-      it("accepts statsEnabled: false", () => {
-        const noStatsRouter = new CtxRouter<TDefaultCtx>({
-          statsEnabled: false,
-        });
-        expect(noStatsRouter.statsEnabled).toBe(false);
-      });
-
-      it("executes handler successfully with stats disabled", async () => {
-        const noStatsRouter = new CtxRouter<TDefaultCtx>({
-          statsEnabled: false,
-          logLevel: "none",
-        });
-
-        noStatsRouter.route("GET /test").to(async (ctx) => {
-          ctx.res.data = { success: true };
-          return ctx;
-        });
-
-        const ctx = noStatsRouter.newCtx();
-        setRoute(ctx, "GET", "/test");
-
-        await noStatsRouter.exec(ctx);
-
-        expect(ctx.res.code).toBe("OK");
-        expect(ctx.res.data).toEqual({ success: true });
-        expect(ctx.meta.ts.in).toBeGreaterThan(0);
-      });
-    });
-
-    it("accepts combined configuration", () => {
-      const customRouter = new CtxRouter<TDefaultCtx>({
-        logLevel: "verbose",
-        statsEnabled: false,
-      });
-
-      expect(customRouter.logLevel).toBe("verbose");
-      expect(customRouter.statsEnabled).toBe(false);
-    });
   });
 
   describe("Storage optimization", () => {

@@ -45,7 +45,6 @@ pnpm format:staged  # Format staged files (used in pre-commit hook)
 - Uses `path-to-regexp` for pattern matching (supports dynamic params like `/user/:userId`)
 - Provides dual lifecycle hook system: exec hooks (outer) and handler hooks (inner)
 - Configurable log levels: `none`, `minimal`, `standard`, `verbose`
-- Configurable stats collection: `statsEnabled` option to enable/disable CPU/memory telemetry
 
 **TDefaultCtx** (`src/core/`)
 
@@ -215,27 +214,6 @@ router.handle(
 - **pattern**: Path or operation pattern (supports `:param` syntax)
 - **Precedence**: Routes with specific actions take precedence over wildcards
 
-### Configuring Telemetry
-
-Control stats collection (CPU/memory metrics) via router config:
-
-```typescript
-// Disable stats collection (better performance, no telemetry)
-const router = new CtxRouter({ statsEnabled: false });
-
-// Enable stats collection (default behavior)
-const router = new CtxRouter({ statsEnabled: true });
-
-// Stats are updated lazily during traffic (no background interval)
-// Frequency: every 5 seconds (STATS_INTERVAL_MS)
-```
-
-Use cases for disabling stats:
-
-- Performance tuning (avoid `process.cpuUsage()` overhead)
-- Compliance requirements (no telemetry in certain environments)
-- Testing (deterministic behavior without metrics)
-
 ### Adding a New Transport Adapter
 
 Create a new file in `src/adapter/` following the pattern:
@@ -302,9 +280,9 @@ if (ctx.user.role.some((r) => allowedRoles.includes(r))) return ctx;
 throw ctxErr.auth.UNAUTHORIZED();
 ```
 
-### Logging and Telemetry Configuration
+### Logging Configuration
 
-Control logging verbosity and stats collection when creating the router:
+Control logging verbosity when creating the router:
 
 ```typescript
 // Log levels
@@ -312,16 +290,6 @@ new CtxRouter<TCtx>({ logLevel: "minimal" }); // Only method, path, traceId
 new CtxRouter<TCtx>({ logLevel: "standard" }); // Essential info (default)
 new CtxRouter<TCtx>({ logLevel: "verbose" }); // All request details
 new CtxRouter<TCtx>({ logLevel: "none" }); // No logging
-
-// Stats collection
-new CtxRouter<TCtx>({ statsEnabled: true }); // Enable CPU/memory metrics (default)
-new CtxRouter<TCtx>({ statsEnabled: false }); // Disable metrics for better performance
-
-// Combined configuration
-new CtxRouter<TCtx>({
-  logLevel: "minimal",
-  statsEnabled: false, // Optimal for high-throughput production
-});
 ```
 
 ## Key Dependencies
