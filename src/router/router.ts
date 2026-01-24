@@ -13,34 +13,38 @@ import { exec as execImpl } from "./lifecycle.exec";
 import { ctxRouterErr } from "./error";
 
 // Factory for creating default hooks
-function createDefaultHooks<TContext extends TDefaultCtx>(): THooks<TContext> {
+function createDefaultHooks<
+  TUserContext extends TDefaultCtx,
+>(): THooks<TUserContext> {
   return {};
 }
 
-export class CtxRouter<TContext extends TDefaultCtx> {
+export class CtxRouter<TUserContext extends TDefaultCtx> {
   // Segment tracking for scoped router
   private segments: string[] = [];
 
   // Middleware chain for this router scope
-  private middleware: Array<(ctx: TContext) => TContext | Promise<TContext>> =
-    [];
+  private middleware: Array<
+    (ctx: TUserContext) => TUserContext | Promise<TUserContext>
+  > = [];
 
   // Handler for this route (set by to())
-  private handler: ((ctx: TContext) => TContext | Promise<TContext>) | null =
-    null;
+  private handler:
+    | ((ctx: TUserContext) => TUserContext | Promise<TUserContext>)
+    | null = null;
 
   // Route storage: exact matches (O(1)) and param routes (regex)
-  public exactRoutes = new Map<string, TRouteEntry<TContext>>();
-  public paramRoutes: TRouteEntry<TContext>[] = [];
+  public exactRoutes = new Map<string, TRouteEntry<TUserContext>>();
+  public paramRoutes: TRouteEntry<TUserContext>[] = [];
 
   // Hook state (per router instance)
-  private hooks: THooks<TContext>;
+  private hooks: THooks<TUserContext>;
 
   // Sealing flag - prevents hook modification after first exec
   private sealed = false;
 
   // Public hook DSL (created once, stable reference)
-  public readonly hook: THookDSL<TContext, CtxRouter<TContext>>;
+  public readonly hook: THookDSL<TUserContext, CtxRouter<TUserContext>>;
 
   public logLevel: LogLevel;
 
@@ -71,7 +75,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   }
 
   // Creates the hook DSL object (called once in constructor)
-  private createHookDSL(): THookDSL<TContext, CtxRouter<TContext>> {
+  private createHookDSL(): THookDSL<TUserContext, CtxRouter<TUserContext>> {
     return {
       onExec: {
         before: (fn) => {
@@ -103,7 +107,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    * Does NOT increment inflight or set timing - that happens in exec().
    * Adapters should enrich the returned context before calling exec().
    */
-  public newCtx(protocol?: string): TContext {
+  public newCtx(protocol?: string): TUserContext {
     // Build default user (anonymous)
     const user = {
       kind: "user" as const,
@@ -164,10 +168,10 @@ export class CtxRouter<TContext extends TDefaultCtx> {
       locals: {},
     };
 
-    return ctx as TContext;
+    return ctx as TUserContext;
   }
 
-  async exec(ctx: TContext): Promise<TContext> {
+  async exec(ctx: TUserContext): Promise<TUserContext> {
     // Seal hooks on first exec - no more modifications allowed
     this.sealed = true;
 
@@ -185,13 +189,13 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    */
   public route(
     segment: string
-  ): Pick<CtxRouter<TContext>, "route" | "via" | "to"> {
+  ): Pick<CtxRouter<TUserContext>, "route" | "via" | "to"> {
     if (typeof segment !== "string" || segment.length === 0) {
       throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
     }
 
     // Create new scoped router (shares route storage; has its own hooks)
-    const scoped = new CtxRouter<TContext>({
+    const scoped = new CtxRouter<TUserContext>({
       logLevel: this.logLevel,
     });
 
@@ -212,8 +216,8 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    * Chainable and supports variadic args.
    */
   public via(
-    ...fns: Array<(ctx: TContext) => TContext | Promise<TContext>>
-  ): Pick<CtxRouter<TContext>, "route" | "via" | "to"> {
+    ...fns: Array<(ctx: TUserContext) => TUserContext | Promise<TUserContext>>
+  ): Pick<CtxRouter<TUserContext>, "route" | "via" | "to"> {
     for (const fn of fns) {
       if (typeof fn !== "function") {
         throw ctxRouterErr.router.INVALID_MIDDLEWARE();
@@ -228,7 +232,9 @@ export class CtxRouter<TContext extends TDefaultCtx> {
    * Middleware (via) runs first, then this handler.
    * Returns void.
    */
-  public to(handler: (ctx: TContext) => TContext | Promise<TContext>): void {
+  public to(
+    handler: (ctx: TUserContext) => TUserContext | Promise<TUserContext>
+  ): void {
     if (typeof handler !== "function") {
       throw ctxRouterErr.router.INVALID_HANDLER();
     }
@@ -252,7 +258,9 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     const mwChain = [...this.middleware];
     const handler = this.handler;
 
-    const composedHandler = async (ctx: TContext): Promise<TContext> => {
+    const composedHandler = async (
+      ctx: TUserContext
+    ): Promise<TUserContext> => {
       let result = ctx;
       for (const mw of mwChain) {
         result = await mw(result);
@@ -270,7 +278,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
     const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
     // 3. Build primary route
-    const route: TRoute<TContext> = {
+    const route: TRoute<TUserContext> = {
       pattern,
       matcher,
       handler: composedHandler,
@@ -289,7 +297,7 @@ export class CtxRouter<TContext extends TDefaultCtx> {
         decode: decodeURIComponent,
       });
 
-      const httpRoute: TRoute<TContext> = {
+      const httpRoute: TRoute<TUserContext> = {
         op: httpOp,
         pattern: httpPattern,
         matcher: httpMatcher,
@@ -379,8 +387,11 @@ export class CtxRouter<TContext extends TDefaultCtx> {
   /**
    * Adds a route to storage (exact or param).
    */
-  private addRouteToStorage(route: TRoute<TContext>, segments: string[]): void {
-    const entry: TRouteEntry<TContext> = { route, segments };
+  private addRouteToStorage(
+    route: TRoute<TUserContext>,
+    segments: string[]
+  ): void {
+    const entry: TRouteEntry<TUserContext> = { route, segments };
 
     // Check if pattern has params
     const hasParams = route.pattern.includes(":");
