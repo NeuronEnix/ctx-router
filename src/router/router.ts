@@ -11,6 +11,7 @@ import {
 import { TRouterInstance, createRouterInstance } from "./instance";
 import { exec as execImpl } from "./lifecycle.exec";
 import { ctxRouterErr } from "./error";
+import { RouteBuilder, TRouteBuilder } from "./builder";
 
 // Factory for creating default hooks
 function createDefaultHooks<
@@ -20,19 +21,6 @@ function createDefaultHooks<
 }
 
 export class CtxRouter<TUserContext extends TDefaultCtx> {
-  // Segment tracking for scoped router
-  private segments: string[] = [];
-
-  // Middleware chain for this router scope
-  private middleware: Array<
-    (ctx: TUserContext) => TUserContext | Promise<TUserContext>
-  > = [];
-
-  // Handler for this route (set by to())
-  private handler:
-    | ((ctx: TUserContext) => TUserContext | Promise<TUserContext>)
-    | null = null;
-
   // Route storage: exact matches (O(1)) and param routes (regex)
   public exactRoutes = new Map<string, TRouteEntry<TUserContext>>();
   public paramRoutes: TRouteEntry<TUserContext>[] = [];
@@ -184,79 +172,37 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
   }
 
   /**
-   * Creates a scoped router with an additional segment prefix.
-   * Returns a new router instance that shares route storage with the parent.
+   * Creates a route builder scope with an additional segment prefix.
+   * This is build-time only (used for route registration).
    */
-  public route(
-    segment: string
-  ): Pick<CtxRouter<TUserContext>, "route" | "via" | "to"> {
+  public route(segment: string): TRouteBuilder<TUserContext> {
     if (typeof segment !== "string" || segment.length === 0) {
       throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
     }
-
-    // Create new scoped router (shares route storage; has its own hooks)
-    const scoped = new CtxRouter<TUserContext>({
-      logLevel: this.logLevel,
-    });
-
-    // Copy segment chain and middleware
-    scoped.segments = [...this.segments, segment];
-    scoped.middleware = [...this.middleware];
-
-    // Share storage (routes registered on any scope go to same storage)
-    scoped.exactRoutes = this.exactRoutes;
-    scoped.paramRoutes = this.paramRoutes;
-
-    return scoped;
+    return new RouteBuilder<TUserContext>(this, [segment], []);
   }
 
   /**
-   * Adds middleware to execute before the handler.
-   * Middleware runs in order: first via() → last via() → handler.
-   * Chainable and supports variadic args.
+   * Registers a route from a builder scope.
+   * Internal entrypoint used by `RouteBuilder.to()`.
    */
-  public via(
-    ...fns: Array<(ctx: TUserContext) => TUserContext | Promise<TUserContext>>
-  ): Pick<CtxRouter<TUserContext>, "route" | "via" | "to"> {
-    for (const fn of fns) {
-      if (typeof fn !== "function") {
-        throw ctxRouterErr.router.INVALID_MIDDLEWARE();
-      }
-      this.middleware.push(fn);
-    }
-    return this;
-  }
-
-  /**
-   * Registers the handler for this route. Terminal - no chaining.
-   * Middleware (via) runs first, then this handler.
-   * Returns void.
-   */
-  public to(
+  public registerRouteFrom(
+    segments: string[],
+    middleware: Array<
+      (ctx: TUserContext) => TUserContext | Promise<TUserContext>
+    >,
     handler: (ctx: TUserContext) => TUserContext | Promise<TUserContext>
   ): void {
-    if (typeof handler !== "function") {
-      throw ctxRouterErr.router.INVALID_HANDLER();
-    }
-    this.handler = handler;
-    this.registerRoute();
-  }
-
-  /**
-   * Composes middleware + handler and registers the route.
-   */
-  private registerRoute(): void {
-    if (this.segments.length === 0) {
+    if (segments.length === 0) {
       throw ctxRouterErr.router.MISSING_SEGMENTS();
     }
 
-    if (!this.handler) {
+    if (!handler) {
       throw ctxRouterErr.router.MISSING_HANDLER();
     }
 
     // Compose: middleware chain → handler
-    const mwChain = [...this.middleware];
-    const handler = this.handler;
+    const mwChain = [...middleware];
 
     const composedHandler = async (
       ctx: TUserContext
@@ -269,9 +215,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
     };
 
     // 1. Detect HTTP grammar and build patterns
-    const { hasHttp, httpOp, nonHttpSegments } = this.analyzeSegments(
-      this.segments
-    );
+    const { hasHttp, httpOp, nonHttpSegments } = this.analyzeSegments(segments);
 
     // 2. Build primary pattern (always)
     const pattern = this.buildPattern(nonHttpSegments, false);
@@ -288,7 +232,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
       route.op = httpOp;
     }
 
-    this.addRouteToStorage(route, this.segments);
+    this.addRouteToStorage(route, segments);
 
     // 4. If HTTP grammar detected, register HTTP route too
     if (hasHttp && httpOp) {
@@ -304,7 +248,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
         handler: composedHandler,
       };
 
-      this.addRouteToStorage(httpRoute, this.segments);
+      this.addRouteToStorage(httpRoute, segments);
     }
   }
 

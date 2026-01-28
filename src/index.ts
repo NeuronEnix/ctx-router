@@ -1,13 +1,13 @@
 import { TDefaultCtx, DEFAULT_USER_ROLE } from "./core";
 import { enrichFromExpress as enrichFromExpressImpl } from "./adapter/express.v5";
-import { CtxRouter, LogLevel, TMiddleware } from "./router";
+import { CtxRouter, LogLevel, TMiddleware, TRouteBuilder } from "./router";
 import {
   CtxBaseError as BaseError,
   ctxErrMap as ErrMap,
   CtxRouterError as RouterError,
   TCtxBaseError as BaseErrorType,
 } from "./router/error";
-export type { TDefaultCtx, LogLevel, TMiddleware };
+export type { TDefaultCtx, LogLevel, TMiddleware, TRouteBuilder };
 export { CtxRouter, DEFAULT_USER_ROLE };
 
 export namespace err {

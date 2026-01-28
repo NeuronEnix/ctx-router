@@ -99,10 +99,14 @@ describe("CtxRouter", () => {
   });
 
   describe("Scoped router API", () => {
-    it("route() returns a new scoped router", () => {
-      const scoped = router.route("user");
+    it("route() returns a route builder scope (not the router)", () => {
+      const scoped = router.route("user") as any;
 
       expect(scoped).not.toBe(router);
+      expect(typeof scoped.route).toBe("function");
+      expect(typeof scoped.via).toBe("function");
+      expect(typeof scoped.to).toBe("function");
+      expect(scoped.exec).toBeUndefined();
     });
 
     it("route() throws on empty segment", () => {
@@ -111,10 +115,9 @@ describe("CtxRouter", () => {
       );
     });
 
-    it("to() throws without segments", () => {
-      expect(() => router.to(async (ctx) => ctx)).toThrow(
-        "Cannot register handler without segments"
-      );
+    it("to() throws if handler is not a function", () => {
+      const scoped = router.route("test") as any;
+      expect(() => scoped.to(null)).toThrow("Router.to() requires a function");
     });
 
     it("registers a simple route", async () => {
