@@ -183,6 +183,18 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
   }
 
   /**
+   * Creates a root route builder scope with middleware applied globally.
+   *
+   * Example:
+   * `router.via(auth).route("GET /health").to(handler)`
+   */
+  public via(
+    ...fns: Array<(ctx: TUserContext) => TUserContext | Promise<TUserContext>>
+  ): TRouteBuilder<TUserContext> {
+    return new RouteBuilder<TUserContext>(this, [], []).via(...fns);
+  }
+
+  /**
    * Registers a route from a builder scope.
    * Internal entrypoint used by `RouteBuilder.to()`.
    */
@@ -341,8 +353,9 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
     const hasParams = route.pattern.includes(":");
 
     if (hasParams) {
-      // Store in paramRoutes array for regex matching
+      // Store in paramRoutes array for regex matching (ordered by specificity)
       this.paramRoutes.push(entry);
+      this.paramRoutes.sort((a, b) => this.compareParamRouteSpecificity(a, b));
     } else {
       // Store in exactRoutes map for O(1) lookup
       // Key format: "op:pattern" or ":pattern" (if no op)
@@ -352,5 +365,59 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
 
       this.exactRoutes.set(key, entry);
     }
+  }
+
+  private getParamRouteSpecificity(pattern: string): {
+    staticCount: number;
+    paramCount: number;
+    len: number;
+  } {
+    const isHttp = pattern.startsWith("/");
+    const rawSegs = isHttp
+      ? pattern.split("/").filter(Boolean)
+      : pattern.split(".");
+    const segs = rawSegs.filter((s) => s.length > 0);
+
+    let staticCount = 0;
+    let paramCount = 0;
+    for (const seg of segs) {
+      if (seg.startsWith(":")) {
+        paramCount++;
+      } else {
+        staticCount++;
+      }
+    }
+
+    return { staticCount, paramCount, len: segs.length };
+  }
+
+  /**
+   * Sort param routes for predictable matching (Fastify-like):
+   * - more static segments win
+   * - fewer params win
+   * - longer patterns win
+   * - stable tie-breakers (pattern, then op)
+   */
+  private compareParamRouteSpecificity(
+    a: TRouteEntry<TUserContext>,
+    b: TRouteEntry<TUserContext>
+  ): number {
+    const aSpec = this.getParamRouteSpecificity(a.route.pattern);
+    const bSpec = this.getParamRouteSpecificity(b.route.pattern);
+
+    if (aSpec.staticCount !== bSpec.staticCount) {
+      return bSpec.staticCount - aSpec.staticCount; // desc
+    }
+    if (aSpec.paramCount !== bSpec.paramCount) {
+      return aSpec.paramCount - bSpec.paramCount; // asc
+    }
+    if (aSpec.len !== bSpec.len) {
+      return bSpec.len - aSpec.len; // desc
+    }
+
+    const patternCmp = a.route.pattern.localeCompare(b.route.pattern);
+    if (patternCmp !== 0) return patternCmp;
+
+    return (a.route.op ?? "").localeCompare(b.route.op ?? "");
   }
 }

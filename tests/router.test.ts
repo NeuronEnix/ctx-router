@@ -109,6 +109,38 @@ describe("CtxRouter", () => {
       expect(scoped.exec).toBeUndefined();
     });
 
+    it("supports global via() before route()", async () => {
+      const events: string[] = [];
+
+      const mw = async (ctx: TDefaultCtx) => {
+        events.push("mw");
+        return ctx;
+      };
+
+      router
+        .via(mw)
+        .route("GET /test")
+        .to(async (ctx) => {
+          events.push("handler");
+          ctx.res.data = { ok: true };
+          return ctx;
+        });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/test");
+      await router.exec(ctx);
+
+      expect(events).toEqual(["mw", "handler"]);
+      expect(ctx.res.data).toEqual({ ok: true });
+    });
+
+    it("router.via().to() throws without segments", () => {
+      const mw = async (ctx: TDefaultCtx) => ctx;
+      expect(() => router.via(mw).to(async (ctx) => ctx)).toThrow(
+        "Cannot register handler without segments"
+      );
+    });
+
     it("route() throws on empty segment", () => {
       expect(() => router.route("")).toThrow(
         "Router.route() requires a non-empty string segment"
@@ -230,6 +262,48 @@ describe("CtxRouter", () => {
       await router.exec(ctx);
 
       expect(ctx.res.data).toEqual({ matched: "exact" });
+    });
+
+    it("orders param routes by specificity (HTTP slash patterns)", async () => {
+      // Register generic first (would win under insertion-order)
+      router.route("GET /user/:id/:action").to(async (ctx) => {
+        ctx.res.data = { matched: "generic" };
+        return ctx;
+      });
+
+      // Register more specific later
+      router.route("GET /user/:id/detail").to(async (ctx) => {
+        ctx.res.data = { matched: "detail" };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/user/123/detail");
+      await router.exec(ctx);
+
+      expect(ctx.res.data).toEqual({ matched: "detail" });
+      expect((ctx.req.data as any).id).toBe("123");
+    });
+
+    it("orders param routes by specificity (dot patterns)", async () => {
+      // Generic first: job.:id.:op matches any operation segment
+      router.route("job").route(":id").route(":op").to(async (ctx) => {
+        ctx.res.data = { matched: "generic" };
+        return ctx;
+      });
+
+      // More specific later: job.:id.clean should win for job.123.clean
+      router.route("job").route(":id").route("clean").to(async (ctx) => {
+        ctx.res.data = { matched: "clean" };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, undefined, "job.123.clean");
+      await router.exec(ctx);
+
+      expect(ctx.res.data).toEqual({ matched: "clean" });
+      expect((ctx.req.data as any).id).toBe("123");
     });
 
     it("matches routes with params", async () => {
