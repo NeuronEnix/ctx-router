@@ -190,8 +190,11 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
    */
   public via(
     ...fns: Array<(ctx: TUserContext) => TUserContext | Promise<TUserContext>>
-  ): TRouteBuilder<TUserContext> {
-    return new RouteBuilder<TUserContext>(this, [], []).via(...fns);
+  ): Pick<TRouteBuilder<TUserContext>, "route" | "via"> {
+    return new RouteBuilder<TUserContext>(this, [], []).via(...fns) as Pick<
+      TRouteBuilder<TUserContext>,
+      "route" | "via"
+    >;
   }
 
   /**

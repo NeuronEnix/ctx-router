@@ -134,9 +134,9 @@ describe("CtxRouter", () => {
       expect(ctx.res.data).toEqual({ ok: true });
     });
 
-    it("router.via().to() throws without segments", () => {
+    it("router.via().to() still throws without segments (runtime safeguard)", () => {
       const mw = async (ctx: TDefaultCtx) => ctx;
-      expect(() => router.via(mw).to(async (ctx) => ctx)).toThrow(
+      expect(() => (router.via(mw) as any).to(async (ctx: TDefaultCtx) => ctx)).toThrow(
         "Cannot register handler without segments"
       );
     });
