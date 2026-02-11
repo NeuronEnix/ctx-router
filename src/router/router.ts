@@ -14,25 +14,23 @@ import { ctxRouterErr } from "./error";
 import { RouteBuilder, TRouteBuilder } from "./builder";
 
 // Factory for creating default hooks
-function createDefaultHooks<
-  TUserContext extends TDefaultCtx,
->(): THooks<TUserContext> {
+function createDefaultHooks<TUserCtx extends TDefaultCtx>(): THooks<TUserCtx> {
   return {};
 }
 
-export class CtxRouter<TUserContext extends TDefaultCtx> {
+export class CtxRouter<TUserCtx extends TDefaultCtx> {
   // Route storage: exact matches (O(1)) and param routes (regex)
-  public exactRoutes = new Map<string, TRouteEntry<TUserContext>>();
-  public paramRoutes: TRouteEntry<TUserContext>[] = [];
+  public exactRoutes = new Map<string, TRouteEntry<TUserCtx>>();
+  public paramRoutes: TRouteEntry<TUserCtx>[] = [];
 
   // Hook state (per router instance)
-  private hooks: THooks<TUserContext>;
+  private hooks: THooks<TUserCtx>;
 
   // Sealing flag - prevents hook modification after first exec
   private sealed = false;
 
   // Public hook DSL (created once, stable reference)
-  public readonly hook: THookDSL<TUserContext, CtxRouter<TUserContext>>;
+  public readonly hook: THookDSL<TUserCtx, CtxRouter<TUserCtx>>;
 
   public logLevel: LogLevel;
 
@@ -63,7 +61,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
   }
 
   // Creates the hook DSL object (called once in constructor)
-  private createHookDSL(): THookDSL<TUserContext, CtxRouter<TUserContext>> {
+  private createHookDSL(): THookDSL<TUserCtx, CtxRouter<TUserCtx>> {
     return {
       onExec: {
         before: (fn) => {
@@ -95,7 +93,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
    * Does NOT increment inflight or set timing - that happens in exec().
    * Adapters should enrich the returned context before calling exec().
    */
-  public newCtx(protocol?: string): TUserContext {
+  public newCtx(protocol?: string): TUserCtx {
     // Build default user (anonymous)
     const user = {
       kind: "user" as const,
@@ -156,10 +154,10 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
       locals: {},
     };
 
-    return ctx as TUserContext;
+    return ctx as TUserCtx;
   }
 
-  async exec(ctx: TUserContext): Promise<TUserContext> {
+  async exec(ctx: TUserCtx): Promise<TUserCtx> {
     // Seal hooks on first exec - no more modifications allowed
     this.sealed = true;
 
@@ -175,11 +173,11 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
    * Creates a route builder scope with an additional segment prefix.
    * This is build-time only (used for route registration).
    */
-  public route(segment: string): TRouteBuilder<TUserContext> {
+  public route(segment: string): TRouteBuilder<TUserCtx> {
     if (typeof segment !== "string" || segment.length === 0) {
       throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
     }
-    return new RouteBuilder<TUserContext>(this, [segment], []);
+    return new RouteBuilder<TUserCtx>(this, [segment], []);
   }
 
   /**
@@ -189,10 +187,10 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
    * `router.via(auth).route("GET /health").to(handler)`
    */
   public via(
-    ...fns: Array<(ctx: TUserContext) => TUserContext | Promise<TUserContext>>
-  ): Pick<TRouteBuilder<TUserContext>, "route" | "via"> {
-    return new RouteBuilder<TUserContext>(this, [], []).via(...fns) as Pick<
-      TRouteBuilder<TUserContext>,
+    ...fns: Array<(ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>>
+  ): Pick<TRouteBuilder<TUserCtx>, "route" | "via"> {
+    return new RouteBuilder<TUserCtx>(this, [], []).via(...fns) as Pick<
+      TRouteBuilder<TUserCtx>,
       "route" | "via"
     >;
   }
@@ -203,10 +201,8 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
    */
   public registerRouteFrom(
     segments: string[],
-    middleware: Array<
-      (ctx: TUserContext) => TUserContext | Promise<TUserContext>
-    >,
-    handler: (ctx: TUserContext) => TUserContext | Promise<TUserContext>
+    middleware: Array<(ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>>,
+    handler: (ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>
   ): void {
     if (segments.length === 0) {
       throw ctxRouterErr.router.MISSING_SEGMENTS();
@@ -219,9 +215,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
     // Compose: middleware chain → handler
     const mwChain = [...middleware];
 
-    const composedHandler = async (
-      ctx: TUserContext
-    ): Promise<TUserContext> => {
+    const composedHandler = async (ctx: TUserCtx): Promise<TUserCtx> => {
       let result = ctx;
       for (const mw of mwChain) {
         result = await mw(result);
@@ -237,7 +231,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
     const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
     // 3. Build primary route
-    const route: TRoute<TUserContext> = {
+    const route: TRoute<TUserCtx> = {
       pattern,
       matcher,
       handler: composedHandler,
@@ -256,7 +250,7 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
         decode: decodeURIComponent,
       });
 
-      const httpRoute: TRoute<TUserContext> = {
+      const httpRoute: TRoute<TUserCtx> = {
         op: httpOp,
         pattern: httpPattern,
         matcher: httpMatcher,
@@ -346,11 +340,8 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
   /**
    * Adds a route to storage (exact or param).
    */
-  private addRouteToStorage(
-    route: TRoute<TUserContext>,
-    segments: string[]
-  ): void {
-    const entry: TRouteEntry<TUserContext> = { route, segments };
+  private addRouteToStorage(route: TRoute<TUserCtx>, segments: string[]): void {
+    const entry: TRouteEntry<TUserCtx> = { route, segments };
 
     // Check if pattern has params
     const hasParams = route.pattern.includes(":");
@@ -402,8 +393,8 @@ export class CtxRouter<TUserContext extends TDefaultCtx> {
    * - stable tie-breakers (pattern, then op)
    */
   private compareParamRouteSpecificity(
-    a: TRouteEntry<TUserContext>,
-    b: TRouteEntry<TUserContext>
+    a: TRouteEntry<TUserCtx>,
+    b: TRouteEntry<TUserCtx>
   ): number {
     const aSpec = this.getParamRouteSpecificity(a.route.pattern);
     const bSpec = this.getParamRouteSpecificity(b.route.pattern);

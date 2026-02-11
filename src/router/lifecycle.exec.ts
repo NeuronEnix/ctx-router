@@ -21,12 +21,12 @@ import type { CtxRouter } from "./router";
  * @param instance - Router instance for metrics
  * @returns The updated context after execution
  */
-export async function exec<TUserContext extends TDefaultCtx>(
-  ctx: TUserContext,
-  router: CtxRouter<TUserContext>,
-  hooks: THooks<TUserContext>,
+export async function exec<TUserCtx extends TDefaultCtx>(
+  ctx: TUserCtx,
+  router: CtxRouter<TUserCtx>,
+  hooks: THooks<TUserCtx>,
   instance: TRouterInstance
-): Promise<TUserContext> {
+): Promise<TUserCtx> {
   // Update stats lazily (only during traffic, not on background timer)
   updateStatsIfStale();
 
