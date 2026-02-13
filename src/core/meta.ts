@@ -43,6 +43,9 @@ export type CtxMeta = {
 
     /** One-way network delay in ms */
     readonly owd: number;
+
+    /** Ingest latency in ms */
+    ingestLatency: number;
   };
 
   /** Distributed tracing identifiers */

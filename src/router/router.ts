@@ -141,6 +141,7 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
           out: -1,
           execTime: -1,
           owd: -1, // Set in exec()
+          ingestLatency: -1, // Set in exec()
         },
         monitor: {
           traceId: "PENDING", // Set in exec()

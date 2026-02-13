@@ -60,6 +60,7 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       out: -1,
       execTime: -1,
       owd,
+      ingestLatency: -1,
     },
     monitor: {
       traceId,
@@ -150,6 +151,7 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       out: outTime,
       execTime,
       owd: ctx.meta.ts.owd,
+      ingestLatency: ctx.meta.ts.ingestLatency,
     };
 
     decrementInflight(instance);
