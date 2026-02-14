@@ -5,7 +5,92 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2025-02-14
+## [0.2.0] - 2025-02-14
+
+### ⚠️ Breaking Changes
+
+- **Removed default execution hooks**: Default `onExecBefore` and `onExecError` hooks have been removed. Users must now explicitly register their own error handlers using `router.hook.onExec.error()`. Without an error hook, errors will be re-thrown.
+- **Removed statsEnabled parameter**: The `statsEnabled` configuration option has been removed from `CtxRouter` constructor and `exec()` function. Stats are now always computed lazily.
+- **Changed via() return type**: The `router.via()` method now returns a scoped builder with only `route` and `via` methods, preventing direct handler registration without segments.
+- **Renamed context type parameters**: Unified context type parameter naming across router components for consistency (`TCtx` → `TUserCtx`).
+
+### Added
+
+- **RouteBuilder Pattern**: Introduced immutable `RouteBuilder` class for enhanced route management with fluent API
+- **Global Middleware Support**: Added `router.via(...middleware)` to apply middleware globally to all subsequently registered routes
+- **Route Specificity Sorting**: Intelligent route matching that prioritizes:
+  - Exact matches (O(1) lookup)
+  - Routes with more static segments
+  - Routes with fewer parameters
+  - Longer patterns over shorter ones
+- **Ingest Latency Tracking**: Added `ingestLatency` field to `ctx.meta.ts` for tracking request processing delays
+- **Service Name Configuration**: Enhanced router config to accept `serviceName` for better observability
+- **Improved Error Handling**: Better error messages and structured error data in `ctxRouterErr`
+
+### Changed
+
+- **Hook System Simplified**: Removed default hooks in favor of explicit user-defined hooks for better control
+- **Context Type Consistency**: Unified type parameter naming across all router components
+- **Builder-based Routing**: Route registration now uses immutable builder pattern for type safety
+- **Documentation Updates**:
+  - Updated README with 900+ lines of comprehensive documentation
+  - Added badges (npm version, license, TypeScript, bundle size)
+  - Clarified hook system (single exec lifecycle, not dual)
+  - Updated CLAUDE.md to reflect actual implementation
+
+### Fixed
+
+- **LICENSE**: Updated copyright to correct author name (Kaushik R Bangera)
+- **Hook Documentation**: Corrected CLAUDE.md to remove references to non-existent "dual lifecycle hooks"
+
+### Package Improvements
+
+- **Added .npmignore**: Cleaner npm packages by excluding source files, tests, examples, and dev configs
+- **Added CHANGELOG.md**: Proper version tracking and release notes
+- **Added prepublishOnly script**: Ensures clean build and passing tests before publish
+- **Added sideEffects: false**: Better tree-shaking support for bundlers
+
+### Migration Guide (v0.1.0 → v0.2.0)
+
+#### Error Handling (Required)
+
+```typescript
+// Before (v0.1.0): Default error handler was provided
+const router = new CtxRouter();
+
+// After (v0.2.0): Must register error handler explicitly
+const router = new CtxRouter();
+router.hook.onExec.error(async (ctx, err) => {
+  ctx.res.code = "ERROR";
+  ctx.res.msg = err.message;
+  ctx.err = err;
+});
+```
+
+#### Global Middleware
+
+```typescript
+// New in v0.2.0: Apply middleware to all routes
+router
+  .via(authMiddleware, loggingMiddleware)
+  .route("GET /api/users")
+  .to(handler);
+```
+
+#### Context Type Parameter
+
+```typescript
+// Before (v0.1.0)
+function myHandler(ctx: TCtx): Promise<TCtx> { ... }
+
+// After (v0.2.0)
+function myHandler(ctx: TUserCtx): Promise<TUserCtx> { ... }
+// Or keep using TDefaultCtx directly
+```
+
+---
+
+## [0.1.0] - 2025-01-18
 
 ### Added
 
@@ -39,4 +124,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error handling documentation
 - Lifecycle hooks documentation
 
+[0.2.0]: https://github.com/NeuronEnix/ctx-router/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/NeuronEnix/ctx-router/releases/tag/v0.1.0
