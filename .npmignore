@@ -1,0 +1,50 @@
+# Source files
+src/
+tests/
+examples/
+
+# Development files
+*.test.ts
+*.spec.ts
+.eslintrc
+.eslintcache
+eslint.config.mjs
+.prettierrc.json
+.lintstagedrc.json
+tsconfig.json
+vitest.config.ts
+
+# Git and CI
+.git
+.github
+.gitignore
+.gitattributes
+
+# Documentation for development
+CLAUDE.md
+feat.backlog.md
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Misc
+node_modules/
+.husky/
+.tool-versions
+.editorconfig
+pnpm-workspace.yaml
+pnpm-lock.yaml
+
+# Keep only dist/ and essential files:
+# - dist/ (built code)
+# - package.json
+# - README.md
+# - LICENSE

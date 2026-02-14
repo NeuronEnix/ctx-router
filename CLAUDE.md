@@ -43,7 +43,7 @@ pnpm format:staged  # Format staged files (used in pre-commit hook)
 
 - Main router class that handles route registration and execution
 - Uses `path-to-regexp` for pattern matching (supports dynamic params like `/user/:userId`)
-- Provides dual lifecycle hook system: exec hooks (outer) and handler hooks (inner)
+- Provides lifecycle hook system for cross-cutting concerns (logging, error handling, cleanup)
 - Configurable log levels: `none`, `minimal`, `standard`, `verbose`
 
 **TDefaultCtx** (`src/core/`)
@@ -111,21 +111,34 @@ The router automatically chains these together. See `src/example/api/user/userUp
 
 ### Hook System
 
-The router provides **dual lifecycle hooks** with nested try/catch structure:
+The router provides lifecycle hooks for cross-cutting concerns:
 
-**Exec Lifecycle (Outer)** - wraps routing + handler:
+**Execution Lifecycle Hooks** - wrap the entire routing and handler execution:
 
-- `hookOnExecBefore`: Before routing (context prep, inject dependencies)
-- `hookOnExecAfter`: After handler completes successfully (exec-level post-processing)
-- `hookOnExecError`: On routing errors or bubbled handler errors (default: formats error response)
-- `hookOnExecFinally`: Always runs (cleanup, telemetry)
+- `hook.onExec.before`: Before routing (context prep, inject dependencies)
+- `hook.onExec.after`: After handler completes successfully (post-processing, metrics)
+- `hook.onExec.error`: On routing errors or handler errors (formats error response)
+- `hook.onExec.finally`: Always runs (cleanup, telemetry, logging)
 
-**Handler Lifecycle (Inner)** - wraps user's business logic:
+**Hook Registration:**
 
-- `hookOnHandlerBefore`: Before user's handler executes (setup, begin transactions)
-- `hookOnHandlerAfter`: After user's handler succeeds (commit transactions)
-- `hookOnHandlerError`: On user's handler error only (rollback transactions)
-- `hookOnHandlerFinally`: Always runs after handler (handler cleanup)
+```typescript
+router.hook.onExec.before(async (ctx) => {
+  // Setup, logging, tracing
+});
+
+router.hook.onExec.error(async (ctx, error) => {
+  // Format error response, log errors
+  ctx.res.code = "ERROR";
+  ctx.res.msg = error.message;
+});
+
+router.hook.onExec.finally(async (ctx) => {
+  // Cleanup, send metrics
+});
+```
+
+Hooks are sealed after the first `exec()` call and cannot be modified after routing begins.
 
 ## Project Structure
 

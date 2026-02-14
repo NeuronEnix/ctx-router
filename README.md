@@ -1,5 +1,10 @@
 # ctx-router
 
+[![npm version](https://img.shields.io/npm/v/ctx-router.svg)](https://www.npmjs.com/package/ctx-router)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
+[![Bundle Size](https://img.shields.io/badge/Bundle%20Size-37KB-brightgreen.svg)](https://github.com/NeuronEnix/ctx-router)
+
 A transport-agnostic router that normalizes all request types into a single unified context.
 
 Write your business logic once. Run it on Express, Lambda, SQS, gRPC, or any other transport—without changing a single handler.
