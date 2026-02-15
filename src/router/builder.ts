@@ -9,8 +9,11 @@ export type TRouteBuilder<TUserCTx extends TDefaultCtx> = {
    * Adds a segment to the route identity.
    *
    * Examples:
-   * - route("user").route(":id").route("detail") -> "user.:id.detail"
+   * - route("user.").route(":id").route(".detail") -> "user.:id.detail"
+   * - route("/user").route("/:id") -> "/user/:id"
    * - route("GET /user/:id") -> "/user/:id" + method op = GET
+   *
+   * Note: segments are concatenated exactly as provided. Delimiters are user-defined.
    */
   route(segment: string): TRouteBuilder<TUserCTx>;
 

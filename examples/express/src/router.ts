@@ -61,8 +61,8 @@ const userRateLimitMiddleware = async (ctx: TCtx): Promise<TCtx> => {
   return ctx;
 }
 // User routes with inherited middleware
-const userRouter = router.route("user").via( userRateLimitMiddleware, logMiddleware);
+const userRouter = router.route("/user").via(userRateLimitMiddleware, logMiddleware);
 userRouter.route("POST /update").to(api.user.update);
 
 userRouter.route("GET /:userId").to(api.user.detail);
-userRouter.route("detail").to(api.user.detail);
+userRouter.route("/detail").to(api.user.detail);

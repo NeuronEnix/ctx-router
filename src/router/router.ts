@@ -232,11 +232,11 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
       return handler(result);
     };
 
-    // 1. Detect HTTP grammar and build patterns
-    const { hasHttp, httpOp, nonHttpSegments } = this.analyzeSegments(segments);
+    // 1. Detect HTTP grammar and extract op + route pattern parts
+    const { httpOp, patternSegments } = this.analyzeSegments(segments);
 
-    // 2. Build primary pattern (always)
-    const pattern = this.buildPattern(nonHttpSegments, false);
+    // 2. Build pattern by strict concatenation (no implicit delimiters)
+    const pattern = this.buildPattern(patternSegments);
     const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
     // 3. Build primary route
@@ -246,38 +246,20 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
       handler: composedHandler,
     };
 
-    if (hasHttp && httpOp) {
+    if (httpOp) {
       route.op = httpOp;
     }
 
     this.addRouteToStorage(route, segments);
-
-    // 4. If HTTP grammar detected, register HTTP route too
-    if (hasHttp && httpOp) {
-      const httpPattern = this.buildHttpPattern(nonHttpSegments);
-      const httpMatcher = pathMatch(httpPattern, {
-        decode: decodeURIComponent,
-      });
-
-      const httpRoute: TRoute<TUserCtx> = {
-        op: httpOp,
-        pattern: httpPattern,
-        matcher: httpMatcher,
-        handler: composedHandler,
-      };
-
-      this.addRouteToStorage(httpRoute, segments);
-    }
   }
 
   /**
    * Analyzes segments to detect HTTP grammar (method keywords).
-   * Returns HTTP method, flag, and non-HTTP segments.
+   * Returns extracted HTTP method (if any) and pattern segments.
    */
   private analyzeSegments(segments: string[]): {
-    hasHttp: boolean;
     httpOp?: string;
-    nonHttpSegments: string[];
+    patternSegments: string[];
   } {
     const httpMethods = [
       "GET",
@@ -288,8 +270,8 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
       "HEAD",
       "OPTIONS",
     ];
-    const httpSegments: string[] = [];
-    const nonHttpSegments: string[] = [];
+    const httpOps: string[] = [];
+    const patternSegments: string[] = [];
 
     for (const seg of segments) {
       // Check if segment contains HTTP grammar
@@ -299,51 +281,38 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
       );
 
       if (hasMethod) {
-        httpSegments.push(
+        httpOps.push(
           ...parts.filter((p) => httpMethods.includes(p.toUpperCase()))
         );
-        // Strip leading slashes from path segments when HTTP grammar is present
-        const pathParts = parts
+        const routeParts = parts
           .filter((p) => !httpMethods.includes(p.toUpperCase()))
-          .map((p) => (p.startsWith("/") ? p.substring(1) : p))
           .filter((p) => p.length > 0);
-        nonHttpSegments.push(...pathParts);
+        patternSegments.push(...routeParts);
       } else {
-        nonHttpSegments.push(seg);
+        patternSegments.push(seg);
       }
     }
 
     const result: {
-      hasHttp: boolean;
       httpOp?: string;
-      nonHttpSegments: string[];
+      patternSegments: string[];
     } = {
-      hasHttp: httpSegments.length > 0,
-      nonHttpSegments,
+      patternSegments,
     };
 
     // Only add httpOp if it exists
-    if (httpSegments[0]) {
-      result.httpOp = httpSegments[0];
+    if (httpOps[0]) {
+      result.httpOp = httpOps[0];
     }
 
     return result;
   }
 
   /**
-   * Builds a pattern from segments using specified separator.
+   * Builds a pattern by strict segment concatenation.
    */
-  private buildPattern(segments: string[], isHttp: boolean): string {
-    const separator = isHttp ? "/" : ".";
-    return segments.join(separator);
-  }
-
-  /**
-   * Builds an HTTP pattern with leading slash.
-   */
-  private buildHttpPattern(segments: string[]): string {
-    const pattern = this.buildPattern(segments, true);
-    return pattern.startsWith("/") ? pattern : `/${pattern}`;
+  private buildPattern(segments: string[]): string {
+    return segments.join("");
   }
 
   /**
@@ -375,23 +344,12 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
     paramCount: number;
     len: number;
   } {
-    const isHttp = pattern.startsWith("/");
-    const rawSegs = isHttp
-      ? pattern.split("/").filter(Boolean)
-      : pattern.split(".");
-    const segs = rawSegs.filter((s) => s.length > 0);
+    const paramMatches = pattern.match(/:[A-Za-z0-9_]+/g) ?? [];
+    const paramCount = paramMatches.length;
+    const staticPattern = pattern.replace(/:[A-Za-z0-9_]+/g, "");
+    const staticCount = staticPattern.length;
 
-    let staticCount = 0;
-    let paramCount = 0;
-    for (const seg of segs) {
-      if (seg.startsWith(":")) {
-        paramCount++;
-      } else {
-        staticCount++;
-      }
-    }
-
-    return { staticCount, paramCount, len: segs.length };
+    return { staticCount, paramCount, len: pattern.length };
   }
 
   /**
