@@ -11,11 +11,12 @@ export type TRouteBuilder<TUserCTx extends TDefaultCtx> = {
    * Examples:
    * - route("user.").route(":id").route(".detail") -> "user.:id.detail"
    * - route("/user").route("/:id") -> "/user/:id"
+   * - route("/user", "user").route("GET /:id", ".:id") -> 2x2 combinations
    * - route("GET /user/:id") -> "/user/:id" + method op = GET
    *
    * Note: segments are concatenated exactly as provided. Delimiters are user-defined.
    */
-  route(segment: string): TRouteBuilder<TUserCTx>;
+  route(...segments: string[]): TRouteBuilder<TUserCTx>;
 
   /**
    * Adds middleware to the pipeline for this route scope.
@@ -38,19 +39,31 @@ export class RouteBuilder<TUserCtx extends TDefaultCtx>
 {
   constructor(
     private readonly router: CtxRouter<TUserCtx>,
-    private readonly segments: string[],
+    private readonly segmentVariants: string[][],
     private readonly middleware: Array<TMiddleware<TUserCtx>>
   ) {}
 
-  route(segment: string): RouteBuilder<TUserCtx> {
-    if (typeof segment !== "string" || segment.length === 0) {
+  route(...segments: string[]): RouteBuilder<TUserCtx> {
+    if (segments.length === 0) {
       throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
     }
-    return new RouteBuilder<TUserCtx>(
-      this.router,
-      [...this.segments, segment],
-      [...this.middleware]
-    );
+
+    for (const segment of segments) {
+      if (typeof segment !== "string" || segment.length === 0) {
+        throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
+      }
+    }
+
+    const nextVariants: string[][] = [];
+    for (const baseVariant of this.segmentVariants) {
+      for (const segment of segments) {
+        nextVariants.push([...baseVariant, segment]);
+      }
+    }
+
+    return new RouteBuilder<TUserCtx>(this.router, nextVariants, [
+      ...this.middleware,
+    ]);
   }
 
   via(...fns: Array<TMiddleware<TUserCtx>>): RouteBuilder<TUserCtx> {
@@ -61,7 +74,7 @@ export class RouteBuilder<TUserCtx extends TDefaultCtx>
     }
     return new RouteBuilder<TUserCtx>(
       this.router,
-      [...this.segments],
+      [...this.segmentVariants],
       [...this.middleware, ...fns]
     );
   }
@@ -70,10 +83,12 @@ export class RouteBuilder<TUserCtx extends TDefaultCtx>
     if (typeof handler !== "function") {
       throw ctxRouterErr.router.INVALID_HANDLER();
     }
-    this.router[INTERNAL_ROUTER_ACCESS].registerRouteFrom(
-      this.segments,
-      this.middleware,
-      handler
-    );
+    for (const segments of this.segmentVariants) {
+      this.router[INTERNAL_ROUTER_ACCESS].registerRouteFrom(
+        segments,
+        this.middleware,
+        handler
+      );
+    }
   }
 }

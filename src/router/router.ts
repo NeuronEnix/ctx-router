@@ -177,11 +177,17 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
    * Creates a route builder scope with an additional segment prefix.
    * This is build-time only (used for route registration).
    */
-  public route(segment: string): TRouteBuilder<TUserCtx> {
-    if (typeof segment !== "string" || segment.length === 0) {
+  public route(...segments: string[]): TRouteBuilder<TUserCtx> {
+    if (segments.length === 0) {
       throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
     }
-    return new RouteBuilder<TUserCtx>(this, [segment], []);
+    for (const segment of segments) {
+      if (typeof segment !== "string" || segment.length === 0) {
+        throw ctxRouterErr.router.INVALID_ROUTE_SEGMENT();
+      }
+    }
+    const segmentVariants = segments.map((segment) => [segment]);
+    return new RouteBuilder<TUserCtx>(this, segmentVariants, []);
   }
 
   /**
@@ -193,7 +199,7 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
   public via(
     ...fns: Array<(ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>>
   ): Pick<TRouteBuilder<TUserCtx>, "route" | "via"> {
-    return new RouteBuilder<TUserCtx>(this, [], []).via(...fns) as Pick<
+    return new RouteBuilder<TUserCtx>(this, [[]], []).via(...fns) as Pick<
       TRouteBuilder<TUserCtx>,
       "route" | "via"
     >;

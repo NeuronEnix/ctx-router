@@ -127,6 +127,18 @@ describe("CtxRouter", () => {
       );
     });
 
+    it("route() throws when called without segments", () => {
+      expect(() => (router as any).route()).toThrow(
+        "Router.route() requires a non-empty string segment"
+      );
+    });
+
+    it("route() throws when any variant is empty", () => {
+      expect(() => router.route("/user", "")).toThrow(
+        "Router.route() requires a non-empty string segment"
+      );
+    });
+
     it("to() throws if handler is not a function", () => {
       const scoped = router.route("test") as any;
       expect(() => scoped.to(null)).toThrow("Router.to() requires a function");
@@ -183,6 +195,68 @@ describe("CtxRouter", () => {
       setRoute(postCtx, "POST", "/user/update");
       await router.exec(postCtx);
       expect(postCtx.res.data).toEqual({ action: "update" });
+    });
+
+    it("supports cartesian variant expansion across chained route() calls", async () => {
+      router
+        .route("/user", "user")
+        .route("GET /:id", ".:id")
+        .to(async (ctx) => {
+          ctx.res.data = {
+            op: ctx.req.route.op,
+            pattern: ctx.req.route.pattern,
+            id: (ctx.req.data as any).id,
+          };
+          return ctx;
+        });
+
+      const cases: Array<{
+        op: string | undefined;
+        raw: string;
+        expectedOp: string | undefined;
+        expectedPattern: string;
+        expectedId: string;
+      }> = [
+        {
+          op: "GET",
+          raw: "/user/111",
+          expectedOp: "GET",
+          expectedPattern: "/user/:id",
+          expectedId: "111",
+        },
+        {
+          op: "GET",
+          raw: "user/222",
+          expectedOp: "GET",
+          expectedPattern: "user/:id",
+          expectedId: "222",
+        },
+        {
+          op: undefined,
+          raw: "/user.333",
+          expectedOp: undefined,
+          expectedPattern: "/user.:id",
+          expectedId: "333",
+        },
+        {
+          op: "POST",
+          raw: "user.444",
+          expectedOp: "POST",
+          expectedPattern: "user.:id",
+          expectedId: "444",
+        },
+      ];
+
+      for (const c of cases) {
+        const ctx = router.newCtx();
+        setRoute(ctx, c.op, c.raw);
+        await router.exec(ctx);
+        expect(ctx.res.data).toEqual({
+          op: c.expectedOp,
+          pattern: c.expectedPattern,
+          id: c.expectedId,
+        });
+      }
     });
   });
 
