@@ -45,9 +45,6 @@ jobs:
           node-version: 24
           cache: "pnpm"
 
-      - name: Upgrade npm to latest
-        run: npm install -g npm@latest
-
       - name: Enable Corepack
         run: corepack enable
 
