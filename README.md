@@ -57,23 +57,21 @@ npm install ctx-router
 
 ```typescript
 // router.ts
-import { CtxRouter, TDefaultCtx, err } from "ctx-router";
-
-const { CtxBaseError, ctxErrMap } = err;
+import { CtxRouter, CtxType, CtxErr } from "ctx-router";
 
 // Extend the default context with your app-specific fields
-export type TCtx = TDefaultCtx & {
+export type TCtx = CtxType.DefaultCtx & {
   user: { role: string[] };
 };
 
 // Define application errors
-class AppErr extends CtxBaseError {
-  constructor(e) {
+class AppErr extends CtxErr.BaseError {
+  constructor(e: CtxType.BaseError) {
     super(e);
   }
 }
 
-export const appErr = ctxErrMap(AppErr, {
+export const appErr = CtxErr.errMap(AppErr, {
   auth: {
     UNAUTHORIZED: "Unauthorized",
     INVALID_TOKEN: "Invalid token",
@@ -160,7 +158,7 @@ type TResData = { userId: string; userName: string };
 ```typescript
 // server.ts
 import express from "express";
-import { adapter } from "ctx-router";
+import { CtxAdapter } from "ctx-router";
 import { router, TCtx } from "./router";
 
 const app = express();
@@ -177,7 +175,7 @@ app.use(async (req, res) => {
   const ctx: TCtx = router.newCtx();
 
   // 2. Enrich context with Express request data
-  adapter.enrichFromExpress(ctx, req, res);
+  CtxAdapter.enrichFromExpress(ctx, req, res);
 
   // 3. Execute route (runs hooks, matches route, executes handler)
   await router.exec(ctx);
@@ -196,19 +194,19 @@ That's it! Your business logic is now decoupled from Express and ready to run on
 
 ## Core Concepts
 
-### Context (TDefaultCtx)
+### Context (`CtxType.DefaultCtx`)
 
 The single object that flows through your entire system:
 
 ```typescript
-type TDefaultCtx = {
+type DefaultCtx = {
   id: string; // Unique request ID (traceId)
   req: CtxReq; // Request data (see below)
   res: CtxRes; // Response data (see below)
   user: CtxUser; // Authenticated user/service
   meta: CtxMeta; // Metadata (timing, instance, monitoring)
   locals: Record<string, unknown>; // Request-scoped storage
-  err: CtxBaseError | null; // Captured error (if any)
+  err: CtxErr.BaseError | null; // Captured error (if any)
 };
 ```
 
@@ -303,12 +301,12 @@ type CtxMeta = {
 
 ### Extending Context
 
-Extend `TDefaultCtx` to add application-specific fields:
+Extend `CtxType.DefaultCtx` to add application-specific fields:
 
 ```typescript
-import { TDefaultCtx } from "ctx-router";
+import { CtxType } from "ctx-router";
 
-export type TCtx = TDefaultCtx & {
+export type TCtx = CtxType.DefaultCtx & {
   user: {
     role: ("user" | "admin")[];
     organizationId?: string;
@@ -469,22 +467,20 @@ router.hook.onExec.finally(async (ctx) => {
 
 ### Error Handling
 
-ctx-router provides structured error handling with `CtxBaseError` and `ctxErrMap`.
+ctx-router provides structured error handling with `CtxErr.BaseError` and `CtxErr.errMap`.
 
 #### Creating Error Maps
 
 ```typescript
-import { err } from "ctx-router";
+import { CtxErr, CtxType } from "ctx-router";
 
-const { CtxBaseError, ctxErrMap } = err;
-
-class AppError extends CtxBaseError {
-  constructor(e) {
+class AppError extends CtxErr.BaseError {
+  constructor(e: CtxType.BaseError) {
     super(e);
   }
 }
 
-export const appErr = ctxErrMap(AppError, {
+export const appErr = CtxErr.errMap(AppError, {
   auth: {
     UNAUTHORIZED: "Unauthorized",
     TOKEN_EXPIRED: "Token expired",
@@ -517,7 +513,7 @@ throw appErr.user.NOT_FOUND({
 #### Error Structure
 
 ```typescript
-type CtxBaseError = {
+type BaseError = {
   name: string; // "UNAUTHORIZED"
   msg: string; // Human-readable message
   data: Record<string, unknown>; // Safe to send to client
@@ -548,9 +544,9 @@ Adapters enrich the context with transport-specific data. Currently supported:
 ### Express Adapter
 
 ```typescript
-import { adapter } from "ctx-router";
+import { CtxAdapter } from "ctx-router";
 
-adapter.enrichFromExpress(ctx, req, res);
+CtxAdapter.enrichFromExpress(ctx, req, res);
 ```
 
 The Express adapter extracts:
@@ -764,23 +760,21 @@ Here's a full example with multiple routes, middleware, error handling, and Expr
 
 ```typescript
 // router.ts
-import { CtxRouter, TDefaultCtx, err, DEFAULT_USER_ROLE } from "ctx-router";
-
-const { CtxBaseError, ctxErrMap } = err;
+import { CtxRouter, CtxType, CtxErr, DEFAULT_USER_ROLE } from "ctx-router";
 
 // Extend context
-export type TCtx = TDefaultCtx & {
+export type TCtx = CtxType.DefaultCtx & {
   user: { role: (keyof typeof DEFAULT_USER_ROLE)[] };
 };
 
 // Define errors
-class AppErr extends CtxBaseError {
-  constructor(e) {
+class AppErr extends CtxErr.BaseError {
+  constructor(e: CtxType.BaseError) {
     super(e);
   }
 }
 
-export const appErr = ctxErrMap(AppErr, {
+export const appErr = CtxErr.errMap(AppErr, {
   auth: {
     UNAUTHORIZED: "Unauthorized",
     TOKEN_EXPIRED: "Token expired",
@@ -861,7 +855,7 @@ router.hook.onExec.error(async (ctx, err) => {
 ```typescript
 // server.ts
 import express from "express";
-import { adapter } from "ctx-router";
+import { CtxAdapter } from "ctx-router";
 import { router, TCtx } from "./router";
 
 const app = express();
@@ -869,7 +863,7 @@ app.use(express.json());
 
 app.use(async (req, res) => {
   const ctx: TCtx = router.newCtx();
-  adapter.enrichFromExpress(ctx, req, res);
+  CtxAdapter.enrichFromExpress(ctx, req, res);
   await router.exec(ctx);
 
   const httpCode = ctx.res.code === "OK" ? 200 : 400;
@@ -878,7 +872,9 @@ app.use(async (req, res) => {
 
 app.listen(3000, () => {
   console.log("Server running on http://localhost:3000");
-  console.log(`Instance ID: ${router.INSTANCE.ID}`);
+  console.log(
+    "Instance ID is available at ctx.meta.instance.id during request execution"
+  );
 });
 ```
 
