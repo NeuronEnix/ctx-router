@@ -52,5 +52,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build package
+        run: pnpm build:clean
+
+      - name: Run tests
+        run: pnpm test
+
       - name: Publish package to npm
         run: npm publish --provenance --access public
