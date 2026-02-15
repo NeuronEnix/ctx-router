@@ -921,3 +921,5 @@ MIT © Kaushik R Bangera
 ## OIDC Publishing
 
 This package is published using GitHub Actions OIDC authentication.
+
+Published with Node.js 24 LTS and OIDC authentication.
