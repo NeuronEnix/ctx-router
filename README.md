@@ -917,3 +917,7 @@ MIT © Kaushik R Bangera
 - [GitHub Repository](https://github.com/NeuronEnix/ctx-router)
 - [Issues](https://github.com/NeuronEnix/ctx-router/issues)
 - [NPM Package](https://www.npmjs.com/package/ctx-router)
+
+## OIDC Publishing
+
+This package is published using GitHub Actions OIDC authentication.
