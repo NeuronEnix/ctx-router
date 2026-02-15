@@ -1,4 +1,4 @@
-import { THooks } from "./types";
+import { THooks, TRouteEntry } from "./types";
 import { ctxRouterErr } from "./error";
 import { TDefaultCtx } from "../core";
 import { updateStatsIfStale } from "../common/helper";
@@ -9,21 +9,22 @@ import {
   decrementInflight,
 } from "./instance";
 import { STATS } from "../common/const";
-import type { CtxRouter } from "./router";
 
 /**
  * Executes a route handler with full lifecycle hooks.
  * Integrates begin/end logic internally for safe lifecycle management.
  *
  * @param ctx - The context to execute (created via createCtx())
- * @param router - Router instance with route storage
+ * @param exactRoutes - Map of exact route matches
+ * @param paramRoutes - Array of parameterized routes
  * @param hooks - Hook functions to run during execution
  * @param instance - Router instance for metrics
  * @returns The updated context after execution
  */
 export async function exec<TUserCtx extends TDefaultCtx>(
   ctx: TUserCtx,
-  router: CtxRouter<TUserCtx>,
+  exactRoutes: Map<string, TRouteEntry<TUserCtx>>,
+  paramRoutes: TRouteEntry<TUserCtx>[],
   hooks: THooks<TUserCtx>,
   instance: TRouterInstance
 ): Promise<TUserCtx> {
@@ -81,7 +82,7 @@ export async function exec<TUserCtx extends TDefaultCtx>(
 
     // Try exact match first (O(1))
     const exactKey = op ? `${op}:${raw}` : `:${raw}`;
-    const exactMatch = router.exactRoutes.get(exactKey);
+    const exactMatch = exactRoutes.get(exactKey);
 
     if (exactMatch) {
       // Exact match found - populate context and execute
@@ -96,7 +97,7 @@ export async function exec<TUserCtx extends TDefaultCtx>(
     }
 
     // Try param pattern matches (regex)
-    for (const entry of router.paramRoutes) {
+    for (const entry of paramRoutes) {
       const route = entry.route;
 
       // 1. Check op (if route has op, context must match)

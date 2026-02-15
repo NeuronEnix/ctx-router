@@ -2,6 +2,7 @@ import type { TDefaultCtx } from "../core";
 import type { TMiddleware } from "./types";
 import { ctxRouterErr } from "./error";
 import type { CtxRouter } from "./router";
+import { INTERNAL_ROUTER_ACCESS } from "./router";
 
 export type TRouteBuilder<TUserCTx extends TDefaultCtx> = {
   /**
@@ -66,6 +67,10 @@ export class RouteBuilder<TUserCtx extends TDefaultCtx>
     if (typeof handler !== "function") {
       throw ctxRouterErr.router.INVALID_HANDLER();
     }
-    this.router.registerRouteFrom(this.segments, this.middleware, handler);
+    this.router[INTERNAL_ROUTER_ACCESS].registerRouteFrom(
+      this.segments,
+      this.middleware,
+      handler
+    );
   }
 }

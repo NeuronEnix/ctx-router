@@ -13,6 +13,9 @@ import { exec as execImpl } from "./lifecycle.exec";
 import { ctxRouterErr } from "./error";
 import { RouteBuilder, TRouteBuilder } from "./builder";
 
+// Symbol for internal access from RouteBuilder
+export const INTERNAL_ROUTER_ACCESS = Symbol("CtxRouter.internal");
+
 // Factory for creating default hooks
 function createDefaultHooks<TUserCtx extends TDefaultCtx>(): THooks<TUserCtx> {
   return {};
@@ -20,8 +23,8 @@ function createDefaultHooks<TUserCtx extends TDefaultCtx>(): THooks<TUserCtx> {
 
 export class CtxRouter<TUserCtx extends TDefaultCtx> {
   // Route storage: exact matches (O(1)) and param routes (regex)
-  public exactRoutes = new Map<string, TRouteEntry<TUserCtx>>();
-  public paramRoutes: TRouteEntry<TUserCtx>[] = [];
+  private exactRoutes = new Map<string, TRouteEntry<TUserCtx>>();
+  private paramRoutes: TRouteEntry<TUserCtx>[] = [];
 
   // Hook state (per router instance)
   private hooks: THooks<TUserCtx>;
@@ -32,18 +35,14 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
   // Public hook DSL (created once, stable reference)
   public readonly hook: THookDSL<TUserCtx, CtxRouter<TUserCtx>>;
 
-  public logLevel: LogLevel;
+  // Stored for future logging implementation (intentionally unused for now)
+  private _logLevel: LogLevel;
 
   // Router-level INSTANCE
   private readonly instance: TRouterInstance;
 
-  // Public readonly getter
-  public get INSTANCE() {
-    return { ...this.instance };
-  }
-
   constructor(config: CtxRouterConfig = {}) {
-    this.logLevel = config.logLevel ?? "standard";
+    this._logLevel = config.logLevel ?? "standard";
     this.instance = createRouterInstance(config.serviceName);
 
     // Always create hooks for this router instance
@@ -51,6 +50,9 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
 
     // Create hook DSL once (stable reference, no getter)
     this.hook = this.createHookDSL();
+
+    // Explicitly mark _logLevel as intentionally stored for future logging implementation
+    void this._logLevel;
   }
 
   // Prevents hook modification after first exec
@@ -164,7 +166,8 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
 
     return await execImpl(
       ctx,
-      this, // Pass router instance instead of routes array
+      this.exactRoutes,
+      this.paramRoutes,
       this.hooks,
       this.instance
     );
@@ -196,11 +199,16 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
     >;
   }
 
+  // Internal access for RouteBuilder via Symbol
+  [INTERNAL_ROUTER_ACCESS] = {
+    registerRouteFrom: this.registerRouteFrom.bind(this),
+  };
+
   /**
    * Registers a route from a builder scope.
    * Internal entrypoint used by `RouteBuilder.to()`.
    */
-  public registerRouteFrom(
+  private registerRouteFrom(
     segments: string[],
     middleware: Array<(ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>>,
     handler: (ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>

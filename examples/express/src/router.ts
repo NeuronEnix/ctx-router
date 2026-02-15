@@ -32,6 +32,7 @@ export const appErr = ctxErrMap(AppErr, {
   },
 });
 
+
 // Example middleware
 const logMiddleware = async (ctx: TCtx): Promise<TCtx> => {
   console.log(`[middleware] ${ctx.req.route.raw}`);

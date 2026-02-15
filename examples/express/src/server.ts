@@ -34,7 +34,7 @@ app.use(async (req: Request, res: Response) => {
   // 3. Execute route handler (begins lifecycle, runs hooks, ends lifecycle)
   await router.exec(ctx);
   console.log(
-    `[3. Executed] ${ctx.res.code}, ID: ${ctx.id}, SEQ: ${ctx.meta.instance.seq}, INFLIGHT: ${router.INSTANCE.INFLIGHT}\n`
+    `[3. Executed] ${ctx.res.code}, ID: ${ctx.id}, SEQ: ${ctx.meta.instance.seq}\n`
   );
 
   // 4. Send response
@@ -42,8 +42,6 @@ app.use(async (req: Request, res: Response) => {
 });
 
 app.listen(3001, () => {
-  console.log(`Express server listening on port 3001`);
-  console.log(`Router INSTANCE ID: ${router.INSTANCE.ID}`);
-  console.log(`Router INSTANCE Created: ${new Date(router.INSTANCE.CREATED_AT).toISOString()}`);
-  console.log(`Service Name: ${router.INSTANCE.SERVICE_NAME}\n`);
+  console.log(`Express server listening on port 3001\n`);
+  // Note: Instance metadata is available in ctx.meta.instance during request execution
 });
