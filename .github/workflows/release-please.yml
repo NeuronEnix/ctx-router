@@ -43,8 +43,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: "https://registry.npmjs.org"
           cache: "pnpm"
+
+      - name: Upgrade npm to latest
+        run: npm install -g npm@latest
 
       - name: Enable Corepack
         run: corepack enable
@@ -60,5 +62,3 @@ jobs:
 
       - name: Publish package to npm
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
