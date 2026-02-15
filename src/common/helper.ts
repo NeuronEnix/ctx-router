@@ -13,10 +13,12 @@ function updateStats(): void {
   const currentCpuUsage = process.cpuUsage(prevCpuUsage);
   const currentTime = Date.now();
   const elapsedMs = currentTime - prevTime;
+  const safeElapsedMs = elapsedMs > 0 ? elapsedMs : 1;
 
   // CPU time is in microseconds, convert to percentage
   const cpuPercent =
-    ((currentCpuUsage.user + currentCpuUsage.system) / 1000 / elapsedMs) * 100;
+    ((currentCpuUsage.user + currentCpuUsage.system) / 1000 / safeElapsedMs) *
+    100;
   STATS.cpu = Math.round(cpuPercent * 100) / 100;
 
   prevCpuUsage = process.cpuUsage();
