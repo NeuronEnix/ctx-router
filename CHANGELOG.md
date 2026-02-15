@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3](https://github.com/NeuronEnix/ctx-router/compare/v0.2.2...v0.2.3) (2026-02-15)
+
+
+### Bug Fixes
+
+* some release re-write ([7e066e6](https://github.com/NeuronEnix/ctx-router/commit/7e066e69d2eee69a4fce30e61b524c7f425e25d3))
+
 ## [0.2.2](https://github.com/NeuronEnix/ctx-router/compare/v0.2.1...v0.2.2) (2026-02-15)
 
 
