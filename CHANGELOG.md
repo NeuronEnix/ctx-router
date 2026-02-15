@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2](https://github.com/NeuronEnix/ctx-router/compare/v0.2.1...v0.2.2) (2026-02-15)
+
+
+### Bug Fixes
+
+* **ci:** set up pnpm before node cache in publish workflow ([c7f5219](https://github.com/NeuronEnix/ctx-router/commit/c7f52196c0458cbac5247dc1a644a4b5212e595e))
+* feat: release please integration ([20b9bc7](https://github.com/NeuronEnix/ctx-router/commit/20b9bc78bae2c2755abf64462b056c48e9856fea))
+* guard cpu stats sampling and narrow release workflow triggers ([b884699](https://github.com/NeuronEnix/ctx-router/commit/b884699a49b6861502b4c72afa05899738d01feb))
+
 ## [0.2.1] - 2026-02-15
 
 ### Changed
