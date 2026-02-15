@@ -12,7 +12,7 @@ export { CtxRouter, DEFAULT_USER_ROLE };
 
 export namespace CtxType {
   export type DefaultCtx = TDefaultCtx;
-  export type CtxConsumer<TUserCtx extends TDefaultCtx> =
+  export type CtxConsumerFn<TUserCtx extends TDefaultCtx> =
     TCtxConsumerFn<TUserCtx>;
   export type RouteBuilder<TUserCtx extends TDefaultCtx> =
     TRouteBuilder<TUserCtx>;
