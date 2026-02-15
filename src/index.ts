@@ -1,22 +1,30 @@
 import { TDefaultCtx, DEFAULT_USER_ROLE } from "./core";
 import { enrichFromExpress as enrichFromExpressImpl } from "./adapter/express.v5";
-import { CtxRouter, LogLevel, TMiddleware, TRouteBuilder } from "./router";
+import { CtxRouter, TCtxConsumerFn, TRouteBuilder } from "./router";
 import {
-  CtxBaseError as BaseError,
-  ctxErrMap as ErrMap,
-  CtxRouterError as RouterError,
-  TCtxBaseError as BaseErrorType,
+  CtxBaseError,
+  ctxErrMap,
+  CtxRouterError,
+  TCtxBaseError,
 } from "./router/error";
-export type { TDefaultCtx, LogLevel, TMiddleware, TRouteBuilder };
+
 export { CtxRouter, DEFAULT_USER_ROLE };
 
-export namespace err {
-  export const CtxBaseError = BaseError;
-  export const CtxRouterError = RouterError;
-  export const ctxErrMap = ErrMap;
-  export type TCtxBaseError = BaseErrorType;
+export namespace CtxType {
+  export type DefaultCtx = TDefaultCtx;
+  export type CtxConsumer<TUserCtx extends TDefaultCtx> =
+    TCtxConsumerFn<TUserCtx>;
+  export type RouteBuilder<TUserCtx extends TDefaultCtx> =
+    TRouteBuilder<TUserCtx>;
+  export type RouterError = CtxRouterError;
+  export type BaseError = TCtxBaseError;
 }
-export namespace adapter {
+export namespace CtxErr {
+  export const BaseError = CtxBaseError;
+  export const RouterError = CtxRouterError;
+  export const errMap = ctxErrMap;
+}
+export namespace CtxAdapter {
   export const enrichFromExpress = enrichFromExpressImpl;
   // Future: enrichFromLambda, enrichFromGRPC, etc.
 }

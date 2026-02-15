@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import { adapter } from "ctx-router";
+import { CtxAdapter } from "ctx-router";
 import { router, TCtx } from "./router";
 
 const app = express();
@@ -28,7 +28,7 @@ app.use(async (req: Request, res: Response) => {
   console.log(`[1. createCtx] Created context with ID: ${ctx.id}`);
 
   // 2. Enrich context with Express request data
-  adapter.enrichFromExpress(ctx, req, res);
+  CtxAdapter.enrichFromExpress(ctx, req, res);
   console.log(`[2. Enriched] RouteRaw: ${ctx.req.route.raw}`);
 
   // 3. Execute route handler (begins lifecycle, runs hooks, ends lifecycle)

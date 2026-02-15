@@ -55,7 +55,7 @@ export type THookDSL<TUserCtx extends TDefaultCtx, TRouter> = {
 
 export type LogLevel = "none" | "minimal" | "standard" | "verbose";
 
-export type TMiddleware<TUserCtx extends TDefaultCtx> = (
+export type TCtxConsumerFn<TUserCtx extends TDefaultCtx> = (
   ctx: TUserCtx
 ) => TUserCtx | Promise<TUserCtx>;
 

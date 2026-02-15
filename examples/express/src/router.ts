@@ -1,23 +1,16 @@
-import { CtxRouter, DEFAULT_USER_ROLE, err } from "ctx-router";
-import type { TDefaultCtx, err as ErrTypes } from "ctx-router";
+import { CtxRouter, CtxType, CtxErr } from "ctx-router";
 import * as api from "./api/index";
 
-const { CtxBaseError, ctxErrMap } = err;
-type TCtxBaseError = ErrTypes.TCtxBaseError;
-
-export type TCtx = TDefaultCtx & {
-  user: { role: (keyof typeof DEFAULT_USER_ROLE)[] };
-};
-export { DEFAULT_USER_ROLE };
+export type TCtx = CtxType.DefaultCtx;
 
 // Custom error class for this application
-class AppErr extends CtxBaseError {
-  constructor(e: TCtxBaseError) {
+class AppErr extends CtxErr.BaseError {
+  constructor(e: CtxType.BaseError) {
     super(e);
   }
 }
 
-export const appErr = ctxErrMap(AppErr, {
+export const appErr = CtxErr.errMap(AppErr, {
   general: {
     UNKNOWN_ERROR: "Something went wrong",
     RESPONSE_NOT_SET: "Response not set",
@@ -66,12 +59,3 @@ userRouter.route("POST /update").to(api.user.update);
 
 userRouter.route("GET /:userId").to(api.user.detail);
 userRouter.route("/detail").to(api.user.detail);
-
-// Variant expansion example (2x2):
-// const variantUserRouter = router.route("/user", "user");
-// variantUserRouter.route("GET /:userId", ".:userId").to(api.user.detail);
-// Registers:
-// - op=GET, pattern=/user/:userId
-// - op=GET, pattern=user/:userId
-// - op=undefined, pattern=/user.:userId
-// - op=undefined, pattern=user.:userId
