@@ -4,12 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - "src/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "release-please-config.json"
-      - ".release-please-manifest.json"
   workflow_dispatch:
 
 permissions:
