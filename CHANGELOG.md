@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6](https://github.com/NeuronEnix/ctx-router/compare/v0.2.5...v0.2.6) (2026-02-15)
+
+
+### Bug Fixes
+
+* **ci:** configure pure OIDC publishing with latest npm ([9f63992](https://github.com/NeuronEnix/ctx-router/commit/9f639922f122a2f8075ac2ec09d95a30cf73c2ea))
+* **ci:** use npm automation token for publishing ([c588b65](https://github.com/NeuronEnix/ctx-router/commit/c588b65bd78aa08f554025dfd2f0a25eaa87e436))
+
 ## [0.2.5](https://github.com/NeuronEnix/ctx-router/compare/v0.2.4...v0.2.5) (2026-02-15)
 
 
