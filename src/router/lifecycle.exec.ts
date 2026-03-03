@@ -1,7 +1,7 @@
 import { THooks, TRouteEntry } from "./types";
 import { ctxRouterErr } from "./error";
 import { TDefaultCtx } from "../core";
-import { updateStatsIfStale } from "../common/helper";
+import "../common/helper";
 import {
   TRouterInstance,
   getNextSeq,
@@ -28,9 +28,6 @@ export async function exec<TUserCtx extends TDefaultCtx>(
   hooks: THooks<TUserCtx>,
   instance: TRouterInstance
 ): Promise<TUserCtx> {
-  // Update stats lazily (only during traffic, not on background timer)
-  updateStatsIfStale();
-
   // BEGIN LOGIC: Increment inflight, set seq and timing
   const inTime = Date.now();
   const seq = getNextSeq(instance);

@@ -2,7 +2,6 @@ import { STATS_INTERVAL_MS, STATS } from "./const";
 
 let prevCpuUsage = process.cpuUsage();
 let prevTime = Date.now();
-let nextStatsAt = 0; // Force immediate update on first call
 
 function updateStats(): void {
   // Memory: process RSS in MB
@@ -26,14 +25,12 @@ function updateStats(): void {
 }
 
 /**
- * Updates stats only if the interval has elapsed.
- * Lazy update pattern - stats only refresh during traffic, not on background timer.
- * This prevents setInterval from keeping serverless runtimes alive.
+ * Schedules recurring stats updates with self-rescheduling setTimeout.
+ * Timer is unref'ed so it does not keep serverless runtimes alive.
  */
-export function updateStatsIfStale(): void {
-  const now = Date.now();
-  if (now >= nextStatsAt) {
-    updateStats();
-    nextStatsAt = now + STATS_INTERVAL_MS;
-  }
+function scheduleStatsUpdate(): void {
+  updateStats();
+  setTimeout(scheduleStatsUpdate, STATS_INTERVAL_MS);
 }
+
+scheduleStatsUpdate();
