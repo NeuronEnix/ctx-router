@@ -228,8 +228,8 @@ type CtxReq = {
   };
   client?: {
     // Optional client metadata
-    deviceName?: string;
-    deviceId?: string;
+    appVersion?: string;
+    apiVersion?: string;
     sessionId?: string;
   };
   clientInvocation?: {
@@ -554,7 +554,7 @@ The Express adapter extracts:
 - **Method & Path**: HTTP method and request path
 - **Data**: Merged `req.params`, `req.query`, `req.body`
 - **Auth**: Bearer token, API key, refresh token from headers
-- **Client Info**: Device name, ID, OS, app version from custom headers
+- **Client Info**: App/API versions and session metadata from custom headers
 - **Invocation**: Trace ID, sequence, timestamp from custom headers
 - **Transport**: Protocol (`http`), framework (`express`), raw request/response
 
@@ -562,8 +562,7 @@ The Express adapter extracts:
 
 - `x-api-key` - API key authentication
 - `x-ctx-refresh-token` - Refresh token
-- `x-ctx-device-name`, `x-ctx-device-id` - Device info
-- `x-ctx-os`, `x-ctx-app-version`, `x-ctx-api-version` - Client version info
+- `x-ctx-app-version`, `x-ctx-api-version` - Client version info
 - `x-ctx-session-id` - Session identifier
 - `x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-ts` - Client tracing hints
 

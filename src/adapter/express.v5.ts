@@ -52,16 +52,10 @@ export function enrichFromExpress(
   if (refreshToken) auth.refreshToken = refreshToken;
 
   // Build client (only include fields that exist)
-  const deviceName = getHeader(req.headers, "x-ctx-device-name");
-  const deviceId = getHeader(req.headers, "x-ctx-device-id");
-  const os = getHeader(req.headers, "x-ctx-os");
   const appVersion = getHeader(req.headers, "x-ctx-app-version");
   const apiVersion = getHeader(req.headers, "x-ctx-api-version");
   const sessionId = getHeader(req.headers, "x-ctx-session-id");
   const client: TDefaultCtx["req"]["client"] = {};
-  if (deviceName) client.deviceName = deviceName;
-  if (deviceId) client.deviceId = deviceId;
-  if (os) client.os = os;
   if (appVersion) client.appVersion = appVersion;
   if (apiVersion) client.apiVersion = apiVersion;
   if (sessionId) client.sessionId = sessionId;

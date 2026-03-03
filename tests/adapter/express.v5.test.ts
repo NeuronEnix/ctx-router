@@ -195,22 +195,6 @@ describe("enrichFromExpress", () => {
   });
 
   describe("client headers extraction", () => {
-    it("extracts device info from headers", () => {
-      const req = createMockRequest({
-        headers: {
-          "x-ctx-device-name": "iPhone 15",
-          "x-ctx-device-id": "device-abc",
-          "x-ctx-os": "iOS 17",
-        },
-      });
-
-      enrichFromExpress(ctx, req, res);
-
-      expect(ctx.req.client?.deviceName).toBe("iPhone 15");
-      expect(ctx.req.client?.deviceId).toBe("device-abc");
-      expect(ctx.req.client?.os).toBe("iOS 17");
-    });
-
     it("extracts app version info from headers", () => {
       const req = createMockRequest({
         headers: {

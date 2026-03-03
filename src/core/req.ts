@@ -65,9 +65,6 @@ export type CtxReq<Data = Record<string, unknown>> = {
    * Client-provided hints (device / app metadata).
    */
   client?: {
-    deviceName?: string;
-    deviceId?: string;
-    os?: string;
     appVersion?: string;
     apiVersion?: string;
     sessionId?: string;
