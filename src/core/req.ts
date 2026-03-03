@@ -81,6 +81,7 @@ export type CtxReq<Data = Record<string, unknown>> = {
     spanId?: string;
     seq?: number;
     ts?: number; // epoch ms
+    ingressIn?: number; // epoch ms from upstream ingress/LB
     traceparent?: string;
   };
 

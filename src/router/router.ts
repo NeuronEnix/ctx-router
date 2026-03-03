@@ -140,6 +140,7 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
         ts: {
           in: -1, // Set in exec()
           clientIn: -1, // Set in exec()
+          ingressIn: -1, // Set in exec()
           out: -1,
           execTime: -1,
           owd: -1, // Set in exec()

@@ -68,11 +68,15 @@ export function enrichFromExpress(
   );
   const clientTsStr = getHeader(req.headers, "x-ctx-ts");
   const clientTs = clientTsStr ? new Date(clientTsStr).getTime() : undefined;
+  const ingressInStr = getHeader(req.headers, "x-ctx-ingress-in");
+  const ingressIn = ingressInStr ? parseInt(ingressInStr, 10) : undefined;
 
   const clientInvocation: TDefaultCtx["req"]["clientInvocation"] = {};
   if (invocationTraceId) clientInvocation.traceId = invocationTraceId;
   if (invocationSeq) clientInvocation.seq = invocationSeq;
   if (clientTs && !isNaN(clientTs)) clientInvocation.ts = clientTs;
+  if (ingressIn !== undefined && !isNaN(ingressIn))
+    clientInvocation.ingressIn = ingressIn;
 
   // Build transport meta (only include fields that exist)
   const userAgent = getHeader(req.headers, "user-agent");

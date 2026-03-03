@@ -66,6 +66,7 @@ describe("CtxRouter", () => {
       const ctx = router.newCtx();
 
       expect(ctx.meta.ts.in).toBe(-1); // Set in exec()
+      expect(ctx.meta.ts.ingressIn).toBe(-1); // Set in exec()
       expect(ctx.meta.ts.out).toBe(-1);
       expect(ctx.meta.ts.execTime).toBe(-1);
     });
@@ -505,6 +506,7 @@ describe("CtxRouter", () => {
       await router.exec(ctx);
 
       expect(ctx.meta.ts.in).toBeGreaterThan(0);
+      expect(ctx.meta.ts.ingressIn).toBeGreaterThan(0);
       expect(ctx.meta.ts.out).toBeGreaterThan(0);
       expect(ctx.meta.ts.execTime).toBeGreaterThanOrEqual(0);
     });

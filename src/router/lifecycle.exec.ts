@@ -38,7 +38,9 @@ export async function exec<TUserCtx extends TDefaultCtx>(
 
   // Compute timing values using client timestamp if available
   const clientIn = ctx.req.clientInvocation?.ts ?? inTime;
+  const ingressIn = ctx.req.clientInvocation?.ingressIn ?? inTime;
   const owd = inTime - clientIn;
+  const ingestLatency = inTime - ingressIn;
 
   // Update context with begin values (replace entire meta object due to readonly properties)
   ctx.id = traceId;
@@ -55,10 +57,11 @@ export async function exec<TUserCtx extends TDefaultCtx>(
     ts: {
       in: inTime,
       clientIn,
+      ingressIn,
       out: -1,
       execTime: -1,
       owd,
-      ingestLatency: -1,
+      ingestLatency,
     },
     monitor: {
       traceId,
@@ -146,6 +149,7 @@ export async function exec<TUserCtx extends TDefaultCtx>(
     ctx.meta.ts = {
       in: ctx.meta.ts.in,
       clientIn: ctx.meta.ts.clientIn,
+      ingressIn: ctx.meta.ts.ingressIn,
       out: outTime,
       execTime,
       owd: ctx.meta.ts.owd,

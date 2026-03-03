@@ -234,6 +234,18 @@ describe("enrichFromExpress", () => {
       expect(ctx.req.clientInvocation?.ts).toBeUndefined();
     });
 
+    it("sets req.clientInvocation.ingressIn from x-ctx-ingress-in header", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-ingress-in": "1716206400123",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.clientInvocation?.ingressIn).toBe(1716206400123);
+    });
+
     it("does not mutate meta.ts (timing computed in exec)", () => {
       const pastTime = new Date(Date.now() - 100).toISOString();
       const req = createMockRequest({

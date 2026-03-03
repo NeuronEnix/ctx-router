@@ -35,6 +35,9 @@ export type CtxMeta = {
     /** When the client sent the request */
     readonly clientIn: number;
 
+    /** When the upstream ingress/LB received the request */
+    readonly ingressIn: number;
+
     /** When execution completed */
     out: number;
 

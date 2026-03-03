@@ -236,6 +236,7 @@ type CtxReq = {
     // Optional client trace hints
     traceId?: string;
     ts?: number; // Client timestamp
+    ingressIn?: number; // Upstream ingress/LB timestamp
   };
   transport?: {
     // Transport-level details
@@ -282,6 +283,7 @@ type CtxMeta = {
   };
   ts: {
     in: number; // Request arrival time
+    ingressIn: number; // Upstream ingress/LB receive time
     out: number; // Response sent time
     execTime: number; // Total execution time
     clientIn: number; // Client timestamp
@@ -564,7 +566,7 @@ The Express adapter extracts:
 - `x-ctx-refresh-token` - Refresh token
 - `x-ctx-app-version`, `x-ctx-api-version` - Client version info
 - `x-ctx-session-id` - Session identifier
-- `x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-ts` - Client tracing hints
+- `x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-ts`, `x-ctx-ingress-in` - Client tracing hints
 
 ### Future Adapters
 
