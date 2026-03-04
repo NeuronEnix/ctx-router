@@ -30,7 +30,7 @@ export default [
       parser: tsParser,              // ← give it the module, not a string
       parserOptions: {
         // POINT TO A REAL FS PATH, not a relative URL
-        project: path.join(__dirname, "tsconfig.json"),
+        project: path.join(__dirname, "tsconfig.eslint.json"),
 
         // still define these basics
         ecmaVersion: "latest",

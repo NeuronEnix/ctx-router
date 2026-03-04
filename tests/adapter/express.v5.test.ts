@@ -141,7 +141,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.transport.protocol).toBe("http");
+      expect(ctx.req.transport?.protocol).toBe("http");
     });
 
     it("sets request method and path", () => {
@@ -152,8 +152,8 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.transport.request?.method).toBe("PUT");
-      expect(ctx.req.transport.request?.path).toBe("/api/item/123");
+      expect(ctx.req.transport?.request?.method).toBe("PUT");
+      expect(ctx.req.transport?.request?.path).toBe("/api/item/123");
     });
 
     it("sets network info when ip is present", () => {
@@ -164,8 +164,8 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.transport.network?.originIp).toBe("192.168.1.1");
-      expect(ctx.req.transport.network?.hops).toEqual([
+      expect(ctx.req.transport?.network?.originIp).toBe("192.168.1.1");
+      expect(ctx.req.transport?.network?.hops).toEqual([
         "10.0.0.1",
         "192.168.1.1",
       ]);
@@ -181,8 +181,8 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.transport.meta?.["user-agent"]).toBe("Mozilla/5.0");
-      expect(ctx.req.transport.meta?.["content-type"]).toBe("application/json");
+      expect(ctx.req.transport?.meta?.["user-agent"]).toBe("Mozilla/5.0");
+      expect(ctx.req.transport?.meta?.["content-type"]).toBe("application/json");
     });
 
     it("stores raw request and response references", () => {
@@ -190,7 +190,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.transport.raw).toEqual({ req, res });
+      expect(ctx.req.transport?.raw).toEqual({ req, res });
     });
   });
 
