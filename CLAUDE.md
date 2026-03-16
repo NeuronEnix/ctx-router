@@ -61,7 +61,7 @@ pnpm format:staged  # Format staged files (used in pre-commit hook)
 - Adapters enrich an existing context created by `router.createCtx()`
 - Additional adapters can be added for Lambda, gRPC, SQS, etc.
 - Adapters extract method, path, headers, body, auth into unified format
-- Adapters set protocol in transport, action/pattern/original in route
+- Adapters set protocol in transport, op/pattern/raw in route
 
 ### Handler Pattern
 
@@ -170,9 +170,13 @@ src/
 
 ## Implementation Guidelines
 
-### Route Registration (Object-Based API)
+### Route Registration (Object-Based API) [FUTURE]
 
-All routes are registered using the object form with the handler as the second argument:
+> **Note:** This API is planned but not yet implemented. Currently, use the builder pattern:
+> `router.route("GET /user/:id").to(handler)`
+> The object form below shows the intended future API design.
+
+All routes will be registered using the object form with the handler as the second argument:
 
 ```typescript
 import { CtxRouter } from "ctx-router";
@@ -183,7 +187,7 @@ const router = new CtxRouter();
 router.handle(
   {
     protocol: "http",
-    action: "GET", // HTTP method
+    op: "GET", // HTTP method
     pattern: "/user/:id", // Path-only pattern
   },
   myHandler
@@ -193,7 +197,7 @@ router.handle(
 router.handle(
   {
     protocol: "sqs",
-    action: "order.created", // Event name
+    op: "order.created", // Event name
     pattern: "order.queue", // Queue/topic identifier
   },
   orderHandler
@@ -203,17 +207,17 @@ router.handle(
 router.handle(
   {
     protocol: "grpc",
-    action: "CreateUser", // gRPC method
+    op: "CreateUser", // gRPC method
     pattern: "/UserService", // Service path
   },
   grpcHandler
 );
 
-// Wildcard action (matches any action for this protocol+pattern)
+// Wildcard op (matches any op for this protocol+pattern)
 router.handle(
   {
     protocol: "http",
-    // action omitted = wildcard
+    // op omitted = wildcard
     pattern: "/webhook",
   },
   webhookHandler
@@ -223,9 +227,9 @@ router.handle(
 **Key Concepts:**
 
 - **protocol**: Transport identifier (http, grpc, sqs, kafka, etc.)
-- **action** (optional): HTTP method, gRPC operation, event name, etc.
+- **op** (optional): HTTP method, gRPC operation, event name, etc.
 - **pattern**: Path or operation pattern (supports `:param` syntax)
-- **Precedence**: Routes with specific actions take precedence over wildcards
+- **Precedence**: Routes with specific ops take precedence over wildcards
 
 ### Adding a New Transport Adapter
 
@@ -236,16 +240,16 @@ export function enrichFromYourTransport(
   ctx: TDefaultCtx,
   input: YourTransportType
 ): void {
-  // Extract action and path/operation from input
-  const action = extractAction(input); // e.g., method, event name, gRPC method
+  // Extract op and path/operation from input
+  const op = extractOp(input); // e.g., method, event name, gRPC method
   const path = extractPath(input); // e.g., "/user/123", "order.queue"
 
   // Enrich ctx.req with request data
   ctx.req.data = extractData(input);
   ctx.req.route = {
-    action, // Optional: HTTP method, event name, etc.
+    op, // Optional: HTTP method, event name, etc.
     pattern: path, // Will be reassigned by router after matching
-    original: path, // Unchanged: concrete path/operation
+    raw: path, // Unchanged: concrete path/operation
   };
 
   // Optional: set auth, client, invocation fields
@@ -274,14 +278,14 @@ Export it from `src/index.ts` under the `adapter` namespace.
    router.handle(
      {
        protocol: "http",
-       action: "POST",
+       op: "POST",
        pattern: "/user/:userId",
      },
      api.user.update
    );
    ```
 3. Path params (e.g., `/user/:userId`) are automatically extracted into `ctx.req.params`
-4. Routes are matched by protocol first, then action (if specified), then pattern
+4. Routes are matched by protocol first, then op (if specified), then pattern
 
 ### Role-Based Authorization
 

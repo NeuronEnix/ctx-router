@@ -136,7 +136,7 @@ import * as product from "./api/product";
 router.handle(
   {
     protocol: "http",
-    action: "POST",
+    op: "POST",
     pattern: "/product",
   },
   product.create
