@@ -1,7 +1,8 @@
-import { CtxRouter, CtxType, CtxErr } from "ctx-router";
+import { CtxRouter, CtxType, CtxErr, DEFAULT_USER_ROLE } from "ctx-router";
 import * as api from "./api/index";
 
 export type TCtx = CtxType.DefaultCtx;
+export { DEFAULT_USER_ROLE };
 
 // Custom error class for this application
 class AppErr extends CtxErr.BaseError {
