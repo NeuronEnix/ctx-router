@@ -11,7 +11,6 @@ export type CtxResMeta = {
   outTime?: number;
   execTime?: number;
   owd?: number;
-  ingestLatency?: number;
 };
 
 export type CtxRes = {

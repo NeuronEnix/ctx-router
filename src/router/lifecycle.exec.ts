@@ -40,7 +40,6 @@ export async function exec<TUserCtx extends TDefaultCtx>(
   const clientIn = ctx.req.clientInvocation?.ts ?? inTime;
   const ingressIn = ctx.req.clientInvocation?.ingressIn ?? inTime;
   const owd = inTime - clientIn;
-  const ingestLatency = inTime - ingressIn;
 
   // Update context with begin values (replace entire meta object due to readonly properties)
   ctx.id = traceId;
@@ -61,7 +60,6 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       out: -1,
       execTime: -1,
       owd,
-      ingestLatency,
     },
     monitor: {
       traceId,
@@ -153,7 +151,6 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       out: outTime,
       execTime,
       owd: ctx.meta.ts.owd,
-      ingestLatency: ctx.meta.ts.ingestLatency,
     };
 
     decrementInflight(instance);
