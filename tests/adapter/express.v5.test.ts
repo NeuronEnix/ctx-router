@@ -211,11 +211,11 @@ describe("enrichFromExpress", () => {
   });
 
   describe("timestamp handling", () => {
-    it("sets req.clientInvocation.ts from x-ctx-ts header", () => {
+    it("sets req.clientInvocation.ts from x-ctx-client-ts header", () => {
       const clientTimestamp = new Date("2024-01-01T12:00:00Z").toISOString();
       const req = createMockRequest({
         headers: {
-          "x-ctx-ts": clientTimestamp,
+          "x-ctx-client-ts": clientTimestamp,
         },
       });
 
@@ -226,7 +226,7 @@ describe("enrichFromExpress", () => {
       );
     });
 
-    it("does not set req.clientInvocation.ts when x-ctx-ts is missing", () => {
+    it("does not set req.clientInvocation.ts when x-ctx-client-ts is missing", () => {
       const req = createMockRequest();
 
       enrichFromExpress(ctx, req, res);
@@ -250,7 +250,7 @@ describe("enrichFromExpress", () => {
       const pastTime = new Date(Date.now() - 100).toISOString();
       const req = createMockRequest({
         headers: {
-          "x-ctx-ts": pastTime,
+          "x-ctx-client-ts": pastTime,
         },
       });
 

@@ -566,7 +566,7 @@ The Express adapter extracts:
 - `x-ctx-refresh-token` - Refresh token
 - `x-ctx-app-version`, `x-ctx-api-version` - Client version info
 - `x-ctx-session-id` - Session identifier
-- `x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-ts`, `x-ctx-ingress-in` - Client tracing hints
+- `x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-client-ts`, `x-ctx-ingress-in` - Client tracing hints
 
 ### Future Adapters
 

@@ -66,7 +66,7 @@ export function enrichFromExpress(
     getHeader(req.headers, "x-ctx-seq") || "0",
     10
   );
-  const clientTsStr = getHeader(req.headers, "x-ctx-ts");
+  const clientTsStr = getHeader(req.headers, "x-ctx-client-ts");
   const clientTs = clientTsStr ? new Date(clientTsStr).getTime() : undefined;
   const ingressInStr = getHeader(req.headers, "x-ctx-ingress-in");
   const ingressIn = ingressInStr ? parseInt(ingressInStr, 10) : undefined;
