@@ -65,6 +65,7 @@
     "url": "https://github.com/NeuronEnix/ctx-router/issues"
   },
   "homepage": "https://github.com/NeuronEnix/ctx-router#readme",
+  "packageManager": "pnpm@10.26.2",
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@eslint/js": "^10.0.1",
