@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0](https://github.com/NeuronEnix/ctx-router/compare/v0.4.1...v1.0.0) (2026-05-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Complete API replacement. Routes now registered via router.on(segment).handle(handler) instead of router.on(config, handler).
+* consolidate lifecycle into exec() and improve type safety
+* Refactored hook system from 5 hooks to 8 hooks with dual lifecycle
+* getNewCtx() renamed to begin()
+* router.handle() signature changed
+* toCtx.fromExpress has been completely removed
+* Context creation flow has been restructured
+* **types:** CtxUser role is now an array instead of a single value, and IBaseApi interface has been removed
+
+### Features
+
+* add CPU and memory stats collection ([7e34ef7](https://github.com/NeuronEnix/ctx-router/commit/7e34ef7046285b4da493de4a09b05e7b02b971ec))
+* add default hooks for execution lifecycle management ([4fabda0](https://github.com/NeuronEnix/ctx-router/commit/4fabda0c95c46e60f8b39a7f78e1bdcd8d3d942f))
+* add fluent route API with via() middleware and to() handler ([4e1ab3e](https://github.com/NeuronEnix/ctx-router/commit/4e1ab3e2e6a0308ae1d8df188af3648edc178d6d))
+* add global middleware support and route specificity sorting in CtxRouter ([f53c4ea](https://github.com/NeuronEnix/ctx-router/commit/f53c4eabd64f3532d2dfb4ca8c4f03974e38e7d6))
+* add ingest latency tracking to context types and execution lifecycle ([89b51b0](https://github.com/NeuronEnix/ctx-router/commit/89b51b021d267b59f1c87a3fb81ecb103c4b32cd))
+* add ingressIn timestamp to client context and update related documentation ([b78e8fb](https://github.com/NeuronEnix/ctx-router/commit/b78e8fb1a73877a6cafa6f77f5bd6dc50b48ec0b))
+* enhance context types and express adapter ([44a2c65](https://github.com/NeuronEnix/ctx-router/commit/44a2c654c343804ac006bec65aaf6ba4fc2be765))
+* enhance CtxRouter with service name configuration and improved error handling ([aabf974](https://github.com/NeuronEnix/ctx-router/commit/aabf974401af52a38139f5e6405694e0226ccb3d))
+* enhance request context with framework identification ([344d5dd](https://github.com/NeuronEnix/ctx-router/commit/344d5dd76166a218ffe5c4c064e0346fea1249b2))
+* implement dual lifecycle hooks (exec + handler) ([7ae0008](https://github.com/NeuronEnix/ctx-router/commit/7ae0008b224fdfa742f1440ef2667325c10c274a))
+* implement Phase 2 refactor - canonical routes and telemetry controls ([709def9](https://github.com/NeuronEnix/ctx-router/commit/709def9acd17039851d626b25d31a1ab3e43d867))
+* introduce core context types and error handling ([68a2a5b](https://github.com/NeuronEnix/ctx-router/commit/68a2a5bb775b67459f1306ee625d7d84c11e5c78))
+* introduce RouteBuilder for enhanced route management in CtxRouter ([ae2b00f](https://github.com/NeuronEnix/ctx-router/commit/ae2b00fb33ca24519621c960b3f5836925d3dd4e))
+* release 0.3.0 ([b66c23e](https://github.com/NeuronEnix/ctx-router/commit/b66c23e30936993270ce5ee79cf0a7d5bb8d28fa))
+
+
+### Bug Fixes
+
+* **adapter:** make body win over query and params in ctx.req.data ([0c4a1a4](https://github.com/NeuronEnix/ctx-router/commit/0c4a1a4ff5a2b23a80a6079c5d8b784802d1b813))
+* another release re-write ([b16e4f6](https://github.com/NeuronEnix/ctx-router/commit/b16e4f6adcd262606f2f0e425ebc0bf05abb9294))
+* **ci:** configure npm publish to use OIDC authentication properly ([cd72819](https://github.com/NeuronEnix/ctx-router/commit/cd728197122a298f593347c57b0eade1fe140a61))
+* **ci:** configure pure OIDC publishing with latest npm ([9f63992](https://github.com/NeuronEnix/ctx-router/commit/9f639922f122a2f8075ac2ec09d95a30cf73c2ea))
+* **ci:** pin pnpm to 10.26.2 and drop corepack override ([5a2a8f1](https://github.com/NeuronEnix/ctx-router/commit/5a2a8f11bb215392f71cdf594c1dd30b42fad679))
+* **ci:** set up pnpm before node cache in publish workflow ([c7f5219](https://github.com/NeuronEnix/ctx-router/commit/c7f52196c0458cbac5247dc1a644a4b5212e595e))
+* **ci:** use npm automation token for publishing ([c588b65](https://github.com/NeuronEnix/ctx-router/commit/c588b65bd78aa08f554025dfd2f0a25eaa87e436))
+* **example:** re-export DEFAULT_USER_ROLE from example router ([ff37726](https://github.com/NeuronEnix/ctx-router/commit/ff377267e161432bd30ea33434faaa6f02eb4878))
+* feat: release please integration ([20b9bc7](https://github.com/NeuronEnix/ctx-router/commit/20b9bc78bae2c2755abf64462b056c48e9856fea))
+* guard cpu stats sampling and narrow release workflow triggers ([b884699](https://github.com/NeuronEnix/ctx-router/commit/b884699a49b6861502b4c72afa05899738d01feb))
+* some release re-write ([7e066e6](https://github.com/NeuronEnix/ctx-router/commit/7e066e69d2eee69a4fce30e61b524c7f425e25d3))
+* update documentation with build environment info ([784981e](https://github.com/NeuronEnix/ctx-router/commit/784981e4e21fd0fd17297bc8039c0757e2ab6b99))
+* update environment variable access syntax in index.ts ([1c35ced](https://github.com/NeuronEnix/ctx-router/commit/1c35ced66b28de7f2b6f8bacd6c3e34fde4046b7))
+* update metrics to use -1 for unavailable values ([9efb831](https://github.com/NeuronEnix/ctx-router/commit/9efb831b4fd218c7546abc902ed62f6f3134d2f7))
+* update output timestamp to -1 for uninitialized context ([ab64160](https://github.com/NeuronEnix/ctx-router/commit/ab641604c6b3120dcd0c58732ba0988784875c65))
+* update route definitions to use explicit path segments ([522a63a](https://github.com/NeuronEnix/ctx-router/commit/522a63a713c687af9b535547a457da9fb21b8ad5))
+
+
+### Code Refactoring
+
+* consolidate lifecycle into exec() and improve type safety ([1ed7d67](https://github.com/NeuronEnix/ctx-router/commit/1ed7d670511f81884f1b3996bedfe9942b6f12a6))
+* implement pattern-first router with scoped API ([df06740](https://github.com/NeuronEnix/ctx-router/commit/df0674079cc759b986572b509e4b99ee500cad0b))
+* introduce three-phase request lifecycle with begin/exec/end ([f57d834](https://github.com/NeuronEnix/ctx-router/commit/f57d83488fc66a40cc7c5a6b87c3b9746a57b3ae))
+* make router protocol-agnostic with single route parameter ([e4a70da](https://github.com/NeuronEnix/ctx-router/commit/e4a70da12a9020ea3e3dfce95fec8075f471cae8))
+* move INSTANCE to router and restructure context creation flow ([3e7a2b8](https://github.com/NeuronEnix/ctx-router/commit/3e7a2b846c643b355dbb57ce03144b836618b11c))
+* remove deprecated toCtx namespace ([ce772d0](https://github.com/NeuronEnix/ctx-router/commit/ce772d0670641a403ec44f3d61fcb584bc872748))
+* **types:** update context types with new fields and remove base API interface ([f3ab9bf](https://github.com/NeuronEnix/ctx-router/commit/f3ab9bf65730d163c3017807242f75ef2741cfc0))
+
 ## [0.4.1](https://github.com/NeuronEnix/ctx-router/compare/v0.4.0...v0.4.1) (2026-05-16)
 
 
