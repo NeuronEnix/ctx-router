@@ -76,7 +76,7 @@ describe("enrichFromExpress", () => {
       });
     });
 
-    it("params override query which overrides body", () => {
+    it("body overrides query which overrides params", () => {
       const req = createMockRequest({
         body: { field: "body" },
         query: { field: "query" },
@@ -85,7 +85,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.data.field).toBe("params");
+      expect(ctx.req.data.field).toBe("body");
     });
   });
 

@@ -98,7 +98,7 @@ There is no `router.handle({...}, fn)` API. Route registration is exclusively th
 {
   id: string,                           // traceId, set during exec()
   req: {
-    data: Record<string, unknown>,      // merged body + query + params (params win — see precedence note below)
+    data: Record<string, unknown>,      // merged params + query + body (body wins on key collisions — see precedence note below)
     route: { op?, raw, pattern },       // op set by adapter, pattern set by router after match
     auth?, client?, clientInvocation?,  // optional ingress hints
     transport?: { protocol, framework?, request?, data?, network?, meta?, raw }
@@ -170,7 +170,7 @@ Things to know:
 - **Cartesian variant expansion.** `route("/user", "user").route("GET /:id", ".:id")` registers the handler under **all four** segment combinations. Use this when you want the same handler reachable via multiple syntaxes (e.g. slash form + dot form).
 - **Builder is immutable.** Each `.route()` / `.via()` returns a new builder; the original is unaffected. Reuse safely.
 - **`router.via(...)` returns a restricted scope** with only `route` and `via` exposed (no direct `.to()`) — you must `.route(...)` before terminating with `.to(handler)`.
-- **Param precedence at runtime.** The Express adapter does `{ ...req.body, ...req.query, ...req.params }`, so for any key collision **path params override query, and query overrides body** (last spread wins). Then on match, the router does `{ ...matchedParams, ...ctx.req.data }`, so router-extracted `:params` have the _lowest_ priority — anything already in `ctx.req.data` with the same key wins. New adapters should follow the same priority for parity.
+- **Param precedence at runtime.** The Express adapter does `{ ...req.params, ...req.query, ...req.body }`, so for any key collision **body overrides query, and query overrides path params** (last spread wins — body is the highest-priority input). Then on match, the router does `{ ...matchedParams, ...ctx.req.data }`, so router-extracted `:params` have the _lowest_ priority — anything already in `ctx.req.data` with the same key wins. New adapters should follow the same priority for parity.
 - **Pattern storage.** No-`:` patterns go into an exact `Map` keyed by `"op:pattern"` (or `":pattern"` if no op). Patterns with `:` are sorted by (more static chars > fewer params > longer pattern > lexical) and matched in order.
 
 ## Handler convention
@@ -228,7 +228,7 @@ Adapter contract: take whatever the platform hands you, mutate the provided `ctx
 
 Required:
 
-- `ctx.req.data` — merge inputs (params/query/body or their equivalents) into one object. Adopt **params > query > body** priority (path/route params win on key collisions) for parity with the Express adapter — i.e. spread as `{ ...body, ...query, ...params }`.
+- `ctx.req.data` — merge inputs (params/query/body or their equivalents) into one object. Adopt **body > query > params** priority (body wins on key collisions) for parity with the Express adapter — i.e. spread as `{ ...params, ...query, ...body }`.
 - `ctx.req.route` — set `op` (HTTP method, event name, gRPC method, …) and `raw` (concrete path/key/topic). Leave `pattern` as `"PENDING"` — the router rewrites it after matching.
 - `ctx.req.transport` — set `protocol` (always) plus any of `framework`, `request`, `network`, `meta`, `raw`. Stash the platform's native object(s) in `raw` so userland code can escape-hatch when needed.
 

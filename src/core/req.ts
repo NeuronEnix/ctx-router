@@ -1,9 +1,9 @@
 export type CtxReq<Data = Record<string, unknown>> = {
   /**
    * Unified input payload for business logic.
-   * Adapter MUST merge body + query + params using:
-   * body < query < params (path params have highest priority on key collisions).
-   * Spread order is `{ ...body, ...query, ...params }` — last wins.
+   * Adapter MUST merge params + query + body using:
+   * params < query < body (body has highest priority on key collisions).
+   * Spread order is `{ ...params, ...query, ...body }` — last wins.
    */
   data: Data;
 
