@@ -34,9 +34,9 @@ export type TRouteBuilder<TUserCTx extends TDefaultCtx> = {
  * Immutable builder used only for build-time DSL (`route/via/to`).
  * It holds accumulated segments + middleware and registers into the owning router.
  */
-export class RouteBuilder<TUserCtx extends TDefaultCtx>
-  implements TRouteBuilder<TUserCtx>
-{
+export class RouteBuilder<
+  TUserCtx extends TDefaultCtx,
+> implements TRouteBuilder<TUserCtx> {
   constructor(
     private readonly router: CtxRouter<TUserCtx>,
     private readonly segmentVariants: string[][],
