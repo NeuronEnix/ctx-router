@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2](https://github.com/NeuronEnix/ctx-router/compare/v0.4.1...v0.4.2) (2026-05-16)
+
+
+### Bug Fixes
+
+* **ci:** pin pnpm to 10.26.2 and drop corepack override ([5a2a8f1](https://github.com/NeuronEnix/ctx-router/commit/5a2a8f11bb215392f71cdf594c1dd30b42fad679))
+
 ## [0.4.1](https://github.com/NeuronEnix/ctx-router/compare/v0.4.0...v0.4.1) (2026-05-16)
 
 
