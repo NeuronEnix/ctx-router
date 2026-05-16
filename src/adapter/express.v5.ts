@@ -86,7 +86,7 @@ export function enrichFromExpress(
   if (contentType) transportMeta["content-type"] = contentType;
 
   // Enrich ctx.req
-  ctx.req.data = { ...req.body, ...req.query, ...req.params };
+  ctx.req.data = { ...req.params, ...req.query, ...req.body };
   ctx.req.route = {
     op: method, // HTTP method (GET, POST, etc.)
     raw: path, // Concrete path with "/" separator
