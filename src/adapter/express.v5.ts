@@ -7,17 +7,6 @@ function getPath(url: string): string {
   return url.substring(0, queryParamPos);
 }
 
-function extractBearerToken(
-  authHeader: string | string[] | undefined
-): string | undefined {
-  if (!authHeader) return undefined;
-  const auth = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-  if (auth?.startsWith("Bearer ")) {
-    return auth.substring(7);
-  }
-  return undefined;
-}
-
 function getHeader(
   headers: Request["headers"],
   key: string
@@ -26,6 +15,56 @@ function getHeader(
   if (!value) return undefined;
   return Array.isArray(value) ? value[0] : value;
 }
+
+function getFirstHeader(
+  headers: Request["headers"],
+  keys: readonly string[]
+): string | undefined {
+  for (const key of keys) {
+    const v = getHeader(headers, key);
+    if (v) return v;
+  }
+  return undefined;
+}
+
+type ParsedAuthorization =
+  | { kind: "bearer"; token: string }
+  | { kind: "basic"; clientId: string; clientSecret: string }
+  | null;
+
+function parseAuthorization(
+  authHeader: string | string[] | undefined
+): ParsedAuthorization {
+  if (!authHeader) return null;
+  const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+  if (!raw) return null;
+
+  if (raw.startsWith("Bearer ")) {
+    const token = raw.slice(7).trim();
+    return token ? { kind: "bearer", token } : null;
+  }
+
+  if (raw.startsWith("Basic ")) {
+    const encoded = raw.slice(6).trim();
+    if (!encoded) return null;
+    let decoded: string;
+    try {
+      decoded = Buffer.from(encoded, "base64").toString("utf8");
+    } catch {
+      return null;
+    }
+    const sep = decoded.indexOf(":");
+    if (sep === -1) return null;
+    const clientId = decoded.slice(0, sep);
+    const clientSecret = decoded.slice(sep + 1);
+    if (!clientId) return null;
+    return { kind: "basic", clientId, clientSecret };
+  }
+
+  return null;
+}
+
+const API_KEY_HEADERS = ["x-ctx-api-key", "x-api-key", "apikey"] as const;
 
 /**
  * Enriches an existing context with Express request data.
@@ -43,24 +82,33 @@ export function enrichFromExpress(
   const path = getPath(req.url);
 
   // Build auth (only include fields that exist)
-  const bearerToken = extractBearerToken(req.headers.authorization);
-  const apiKey = getHeader(req.headers, "x-api-key");
-  const refreshToken = getHeader(req.headers, "x-ctx-refresh-token");
   const auth: TDefaultCtx["req"]["auth"] = {};
-  if (bearerToken) auth.bearerToken = bearerToken;
+  const parsedAuth = parseAuthorization(req.headers.authorization);
+  if (parsedAuth?.kind === "bearer") {
+    auth.bearerToken = parsedAuth.token;
+  } else if (parsedAuth?.kind === "basic") {
+    auth.clientId = parsedAuth.clientId;
+    auth.clientSecret = parsedAuth.clientSecret;
+  }
+  const apiKey = getFirstHeader(req.headers, API_KEY_HEADERS);
   if (apiKey) auth.apiKey = apiKey;
+  const refreshToken = getHeader(req.headers, "x-ctx-refresh-token");
   if (refreshToken) auth.refreshToken = refreshToken;
 
-  // Build client (only include fields that exist)
+  // Build caller (only include fields that exist)
+  const caller: TDefaultCtx["req"]["caller"] = {};
+
+  // identity / metadata
   const appVersion = getHeader(req.headers, "x-ctx-app-version");
   const apiVersion = getHeader(req.headers, "x-ctx-api-version");
   const sessionId = getHeader(req.headers, "x-ctx-session-id");
-  const client: TDefaultCtx["req"]["client"] = {};
-  if (appVersion) client.appVersion = appVersion;
-  if (apiVersion) client.apiVersion = apiVersion;
-  if (sessionId) client.sessionId = sessionId;
+  const deviceId = getHeader(req.headers, "x-ctx-device-id");
+  if (appVersion) caller.appVersion = appVersion;
+  if (apiVersion) caller.apiVersion = apiVersion;
+  if (sessionId) caller.sessionId = sessionId;
+  if (deviceId) caller.deviceId = deviceId;
 
-  // Build clientInvocation (only include fields that exist)
+  // per-call correlation
   const invocationTraceId = getHeader(req.headers, "x-ctx-trace-id");
   const invocationSeq = parseInt(
     getHeader(req.headers, "x-ctx-seq") || "0",
@@ -71,19 +119,17 @@ export function enrichFromExpress(
   const ingressInStr = getHeader(req.headers, "x-ctx-ingress-in");
   const ingressIn = ingressInStr ? parseInt(ingressInStr, 10) : undefined;
 
-  const clientInvocation: TDefaultCtx["req"]["clientInvocation"] = {};
-  if (invocationTraceId) clientInvocation.traceId = invocationTraceId;
-  if (invocationSeq) clientInvocation.seq = invocationSeq;
-  if (clientTs && !isNaN(clientTs)) clientInvocation.ts = clientTs;
+  if (invocationTraceId) caller.traceId = invocationTraceId;
+  if (invocationSeq) caller.seq = invocationSeq;
+  if (clientTs && !isNaN(clientTs)) caller.ts = clientTs;
   if (ingressIn !== undefined && !isNaN(ingressIn))
-    clientInvocation.ingressIn = ingressIn;
+    caller.ingressIn = ingressIn;
 
-  // Build transport meta (only include fields that exist)
-  const userAgent = getHeader(req.headers, "user-agent");
-  const contentType = getHeader(req.headers, "content-type");
-  const transportMeta: Record<string, string> = {};
-  if (userAgent) transportMeta["user-agent"] = userAgent;
-  if (contentType) transportMeta["content-type"] = contentType;
+  // Stash raw headers as a transport-level hint (escape hatch).
+  const headers: Record<string, string | string[]> = {};
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (v !== undefined) headers[k] = v;
+  }
 
   // Enrich ctx.req
   ctx.req.data = { ...req.params, ...req.query, ...req.body };
@@ -94,9 +140,7 @@ export function enrichFromExpress(
   };
 
   if (Object.keys(auth).length > 0) ctx.req.auth = auth;
-  if (Object.keys(client).length > 0) ctx.req.client = client;
-  if (Object.keys(clientInvocation).length > 0)
-    ctx.req.clientInvocation = clientInvocation;
+  if (Object.keys(caller).length > 0) ctx.req.caller = caller;
 
   ctx.req.transport = {
     protocol: "http",
@@ -111,7 +155,7 @@ export function enrichFromExpress(
         hops: req.ips,
       },
     }),
-    ...(Object.keys(transportMeta).length > 0 && { meta: transportMeta }),
+    ...(Object.keys(headers).length > 0 && { data: { headers } }),
     raw: {
       req,
       res,

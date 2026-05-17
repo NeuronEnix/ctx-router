@@ -63,21 +63,20 @@ export type CtxReq<Data = Record<string, unknown>> = {
   };
 
   /**
-   * Client-provided hints (device / app metadata).
+   * Caller-provided hints (not authoritative). Two flavors live here:
+   *   - identity / metadata: appVersion, apiVersion, sessionId
+   *   - per-call correlation: traceId, spanId, seq, ts, ingressIn, traceparent
+   *
+   * Canonical values for tracing/timing/sequence live on `ctx.meta`;
+   * tracing middleware may adopt these hints, override them, or ignore them.
    */
-  client?: {
+  caller?: {
+    // identity / metadata
     appVersion?: string;
     apiVersion?: string;
     sessionId?: string;
-  };
-
-  /**
-   * Caller-provided invocation hints (not authoritative).
-   * clientInvocation contains caller-provided hints only.
-   * Canonical values are resolved into ctx.meta.
-   * Used by adapters/tracing middleware to adopt, override, or ignore client hints.
-   */
-  clientInvocation?: {
+    deviceId?: string;
+    // per-call correlation
     traceId?: string;
     spanId?: string;
     seq?: number;
@@ -119,6 +118,7 @@ export type CtxReq<Data = Record<string, unknown>> = {
       params?: Record<string, string>;
       query?: Record<string, string>;
       body?: Record<string, unknown>;
+      headers?: Record<string, string | string[]>;
       [key: string]: unknown;
     };
 
@@ -129,11 +129,6 @@ export type CtxReq<Data = Record<string, unknown>> = {
       originIp?: string;
       hops?: string[];
     };
-
-    /**
-     * Protocol-specific metadata (queue, topic, partition, etc.).
-     */
-    meta?: Record<string, string>;
 
     /**
      * Native ingress object(s) as provided by the platform.

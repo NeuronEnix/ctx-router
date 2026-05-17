@@ -133,6 +133,86 @@ describe("enrichFromExpress", () => {
 
       expect(ctx.req.auth).toBeUndefined();
     });
+
+    it("extracts clientId and clientSecret from Authorization: Basic", () => {
+      const encoded = Buffer.from("my-id:my-secret").toString("base64");
+      const req = createMockRequest({
+        headers: { authorization: `Basic ${encoded}` },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.clientId).toBe("my-id");
+      expect(ctx.req.auth?.clientSecret).toBe("my-secret");
+      expect(ctx.req.auth?.bearerToken).toBeUndefined();
+    });
+
+    it("preserves empty clientSecret in Basic auth (id-only credentials)", () => {
+      const encoded = Buffer.from("public-client:").toString("base64");
+      const req = createMockRequest({
+        headers: { authorization: `Basic ${encoded}` },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.clientId).toBe("public-client");
+      expect(ctx.req.auth?.clientSecret).toBe("");
+    });
+
+    it("ignores malformed Basic auth (no colon after decode)", () => {
+      const encoded = Buffer.from("no-colon-here").toString("base64");
+      const req = createMockRequest({
+        headers: { authorization: `Basic ${encoded}` },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.clientId).toBeUndefined();
+      expect(ctx.req.auth?.clientSecret).toBeUndefined();
+    });
+
+    it("ignores unknown Authorization schemes", () => {
+      const req = createMockRequest({
+        headers: { authorization: "Digest realm=foo" },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth).toBeUndefined();
+    });
+
+    it("prefers x-ctx-api-key over x-api-key", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-api-key": "ctx-key",
+          "x-api-key": "plain-key",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.apiKey).toBe("ctx-key");
+    });
+
+    it("falls back to x-api-key when x-ctx-api-key is absent", () => {
+      const req = createMockRequest({
+        headers: { "x-api-key": "plain-key" },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.apiKey).toBe("plain-key");
+    });
+
+    it("falls back to apikey when neither x-ctx-api-key nor x-api-key is set", () => {
+      const req = createMockRequest({
+        headers: { apikey: "lowercase-key" },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.apiKey).toBe("lowercase-key");
+    });
   });
 
   describe("transport extraction", () => {
@@ -171,20 +251,6 @@ describe("enrichFromExpress", () => {
       ]);
     });
 
-    it("sets transport meta from headers", () => {
-      const req = createMockRequest({
-        headers: {
-          "user-agent": "Mozilla/5.0",
-          "content-type": "application/json",
-        },
-      });
-
-      enrichFromExpress(ctx, req, res);
-
-      expect(ctx.req.transport?.meta?.["user-agent"]).toBe("Mozilla/5.0");
-      expect(ctx.req.transport?.meta?.["content-type"]).toBe("application/json");
-    });
-
     it("stores raw request and response references", () => {
       const req = createMockRequest();
 
@@ -192,26 +258,56 @@ describe("enrichFromExpress", () => {
 
       expect(ctx.req.transport?.raw).toEqual({ req, res });
     });
-  });
 
-  describe("client headers extraction", () => {
-    it("extracts app version info from headers", () => {
+    it("stashes all request headers in transport.data.headers", () => {
       const req = createMockRequest({
         headers: {
-          "x-ctx-app-version": "2.0.0",
-          "x-ctx-api-version": "v2",
+          "x-custom-header": "custom-value",
+          "x-multi-header": ["a", "b"],
+          authorization: "Bearer abc",
         },
       });
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.client?.appVersion).toBe("2.0.0");
-      expect(ctx.req.client?.apiVersion).toBe("v2");
+      expect(ctx.req.transport?.data?.headers).toEqual({
+        "x-custom-header": "custom-value",
+        "x-multi-header": ["a", "b"],
+        authorization: "Bearer abc",
+      });
+    });
+
+    it("does not set transport.data when no headers are present", () => {
+      const req = createMockRequest({ headers: {} });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.transport?.data).toBeUndefined();
+    });
+  });
+
+  describe("caller identity extraction", () => {
+    it("extracts app/api/session/device info into caller", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-app-version": "2.0.0",
+          "x-ctx-api-version": "v2",
+          "x-ctx-session-id": "sess-abc",
+          "x-ctx-device-id": "device-xyz",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.caller?.appVersion).toBe("2.0.0");
+      expect(ctx.req.caller?.apiVersion).toBe("v2");
+      expect(ctx.req.caller?.sessionId).toBe("sess-abc");
+      expect(ctx.req.caller?.deviceId).toBe("device-xyz");
     });
   });
 
   describe("timestamp handling", () => {
-    it("sets req.clientInvocation.ts from x-ctx-client-ts header", () => {
+    it("sets req.caller.ts from x-ctx-client-ts header", () => {
       const clientTimestamp = new Date("2024-01-01T12:00:00Z").toISOString();
       const req = createMockRequest({
         headers: {
@@ -221,20 +317,20 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.clientInvocation?.ts).toBe(
+      expect(ctx.req.caller?.ts).toBe(
         new Date("2024-01-01T12:00:00Z").getTime()
       );
     });
 
-    it("does not set req.clientInvocation.ts when x-ctx-client-ts is missing", () => {
+    it("does not set req.caller.ts when x-ctx-client-ts is missing", () => {
       const req = createMockRequest();
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.clientInvocation?.ts).toBeUndefined();
+      expect(ctx.req.caller?.ts).toBeUndefined();
     });
 
-    it("sets req.clientInvocation.ingressIn from x-ctx-ingress-in header", () => {
+    it("sets req.caller.ingressIn from x-ctx-ingress-in header", () => {
       const req = createMockRequest({
         headers: {
           "x-ctx-ingress-in": "1716206400123",
@@ -243,7 +339,7 @@ describe("enrichFromExpress", () => {
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.clientInvocation?.ingressIn).toBe(1716206400123);
+      expect(ctx.req.caller?.ingressIn).toBe(1716206400123);
     });
 
     it("does not mutate meta.ts (timing computed in exec)", () => {

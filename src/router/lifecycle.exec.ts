@@ -37,8 +37,8 @@ export async function exec<TUserCtx extends TDefaultCtx>(
   const spanId = `${instance.ID}-${seq}`;
 
   // Compute timing values using client timestamp if available
-  const clientIn = ctx.req.clientInvocation?.ts ?? inTime;
-  const ingressIn = ctx.req.clientInvocation?.ingressIn ?? inTime;
+  const clientIn = ctx.req.caller?.ts ?? inTime;
+  const ingressIn = ctx.req.caller?.ingressIn ?? inTime;
   const owd = inTime - clientIn;
 
   // Update context with begin values (replace entire meta object due to readonly properties)

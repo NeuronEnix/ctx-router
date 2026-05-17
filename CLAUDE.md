@@ -29,7 +29,7 @@ The npm package itself only ships `src/`; everything else (`examples/`, `tests/`
 │   │   └── index.ts
 │   ├── core/
 │   │   ├── index.ts              # TDefaultCtx, DEFAULT_USER_ROLE
-│   │   ├── req.ts                # CtxReq (data, route, auth, client, clientInvocation, transport)
+│   │   ├── req.ts                # CtxReq (data, route, auth, caller, transport)
 │   │   ├── res.ts                # CtxRes + CtxResMeta (CtxResMeta is opt-in for adapter envelopes)
 │   │   ├── user.ts               # CtxUser (discriminated: kind "user" | "service")
 │   │   └── meta.ts               # CtxMeta (serviceName, instance, ts, monitor, log)
@@ -100,8 +100,8 @@ There is no `router.handle({...}, fn)` API. Route registration is exclusively th
   req: {
     data: Record<string, unknown>,      // merged params + query + body (body wins on key collisions — see precedence note below)
     route: { op?, raw, pattern },       // op set by adapter, pattern set by router after match
-    auth?, client?, clientInvocation?,  // optional ingress hints
-    transport?: { protocol, framework?, request?, data?, network?, meta?, raw }
+    auth?, caller?,                     // optional ingress hints (auth + caller-provided identity/correlation)
+    transport?: { protocol, framework?, request?, data?, network?, raw }
   },
   res: { code: string, msg: string, data: Record<string, unknown> },
   user: CtxUser,                        // discriminated union, see core/user.ts
@@ -230,19 +230,19 @@ Required:
 
 - `ctx.req.data` — merge inputs (params/query/body or their equivalents) into one object. Adopt **body > query > params** priority (body wins on key collisions) for parity with the Express adapter — i.e. spread as `{ ...params, ...query, ...body }`.
 - `ctx.req.route` — set `op` (HTTP method, event name, gRPC method, …) and `raw` (concrete path/key/topic). Leave `pattern` as `"PENDING"` — the router rewrites it after matching.
-- `ctx.req.transport` — set `protocol` (always) plus any of `framework`, `request`, `network`, `meta`, `raw`. Stash the platform's native object(s) in `raw` so userland code can escape-hatch when needed.
+- `ctx.req.transport` — set `protocol` (always) plus any of `framework`, `request`, `data` (per-transport input like headers, queue/topic/partition, etc.), `network`, `raw`. Stash the platform's native object(s) in `raw` so userland code can escape-hatch when needed.
 
 Optional:
 
 - `ctx.req.auth` — extract any standard credentials you can.
-- `ctx.req.client`, `ctx.req.clientInvocation` — extract caller-provided version/trace hints.
+- `ctx.req.caller` — extract caller-provided identity (appVersion, apiVersion, sessionId, deviceId) and per-call correlation (traceId, spanId, seq, ts, ingressIn, traceparent) hints.
 
 Reference: `src/adapter/express.v5.ts` (note: its signature is `(ctx, req, res)` because it stashes the response object in `transport.raw` for downstream use). Export new adapters from `src/index.ts` under the `CtxAdapter` namespace.
 
 ## TypeScript config (notes that affect edits)
 
 - `target: ES2021`, `module/moduleResolution: NodeNext`, ESM-aware (`"sideEffects": false` is set in `package.json` despite `common/helper.ts` having a side effect — keep that in mind if you ever break tree-shakability further).
-- `strict` plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`. Optional properties must be conditionally assigned (see how `enrichFromExpress` only assigns `auth`/`client`/`clientInvocation` when non-empty).
+- `strict` plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`. Optional properties must be conditionally assigned (see how `enrichFromExpress` only assigns `auth`/`client`/`caller` when non-empty).
 - `experimentalDecorators` + `emitDecoratorMetadata` are on, but not currently used in `src/`.
 
 ## Tests
