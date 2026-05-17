@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0](https://github.com/NeuronEnix/ctx-router/compare/v0.4.2...v0.5.0) (2026-05-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **req:** consolidate caller hints, expand auth, drop transport.meta
+
+### Code Refactoring
+
+* **req:** consolidate caller hints, expand auth, drop transport.meta ([e161845](https://github.com/NeuronEnix/ctx-router/commit/e1618457b4907a7b63125f57421f7446c5c8edd4))
+
 ## [0.4.2](https://github.com/NeuronEnix/ctx-router/compare/v0.4.1...v0.4.2) (2026-05-16)
 
 
