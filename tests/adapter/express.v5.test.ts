@@ -304,22 +304,62 @@ describe("enrichFromExpress", () => {
       expect(ctx.req.caller?.sessionId).toBe("sess-abc");
       expect(ctx.req.caller?.deviceId).toBe("device-xyz");
     });
-  });
 
-  describe("timestamp handling", () => {
-    it("sets req.caller.ts from x-ctx-client-ts header", () => {
-      const clientTimestamp = new Date("2024-01-01T12:00:00Z").toISOString();
+    it("extracts traceparent and x-ctx-span-id into caller", () => {
       const req = createMockRequest({
         headers: {
-          "x-ctx-client-ts": clientTimestamp,
+          traceparent:
+            "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+          "x-ctx-span-id": "span-42",
+          "x-ctx-trace-id": "trace-42",
         },
       });
 
       enrichFromExpress(ctx, req, res);
 
-      expect(ctx.req.caller?.ts).toBe(
-        new Date("2024-01-01T12:00:00Z").getTime()
+      expect(ctx.req.caller?.traceparent).toBe(
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
       );
+      expect(ctx.req.caller?.spanId).toBe("span-42");
+      expect(ctx.req.caller?.traceId).toBe("trace-42");
+    });
+  });
+
+  describe("timestamp handling", () => {
+    it("sets req.caller.ts from epoch-ms x-ctx-client-ts header", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-client-ts": "1704110400000",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.caller?.ts).toBe(1704110400000);
+    });
+
+    it("ignores non-numeric x-ctx-client-ts values", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-client-ts": "2024-01-01T12:00:00Z",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.caller?.ts).toBeUndefined();
+    });
+
+    it("ignores non-numeric x-ctx-ingress-in values", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-ingress-in": "12abc",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.caller?.ingressIn).toBeUndefined();
     });
 
     it("does not set req.caller.ts when x-ctx-client-ts is missing", () => {

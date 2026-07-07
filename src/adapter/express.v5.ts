@@ -93,21 +93,27 @@ export function enrichFromExpress(
   const sessionId = getHeader(req.headers, "x-ctx-session-id");
   const deviceId = getHeader(req.headers, "x-ctx-device-id");
   const traceId = getHeader(req.headers, "x-ctx-trace-id");
+  const spanId = getHeader(req.headers, "x-ctx-span-id");
+  const traceparent = getHeader(req.headers, "traceparent");
+  // Numeric hints are epoch ms / integers; strict Number() parsing so
+  // malformed values are dropped instead of silently truncated
   const seqStr = getHeader(req.headers, "x-ctx-seq");
-  const seq = seqStr ? parseInt(seqStr, 10) : undefined;
+  const seq = seqStr ? Number(seqStr) : undefined;
   const tsStr = getHeader(req.headers, "x-ctx-client-ts");
-  const ts = tsStr ? new Date(tsStr).getTime() : undefined;
+  const ts = tsStr ? Number(tsStr) : undefined;
   const ingressInStr = getHeader(req.headers, "x-ctx-ingress-in");
-  const ingressIn = ingressInStr ? parseInt(ingressInStr, 10) : undefined;
+  const ingressIn = ingressInStr ? Number(ingressInStr) : undefined;
 
   if (appVersion) caller.appVersion = appVersion;
   if (apiVersion) caller.apiVersion = apiVersion;
   if (sessionId) caller.sessionId = sessionId;
   if (deviceId) caller.deviceId = deviceId;
   if (traceId) caller.traceId = traceId;
-  if (seq !== undefined && !isNaN(seq)) caller.seq = seq;
-  if (ts !== undefined && !isNaN(ts)) caller.ts = ts;
-  if (ingressIn !== undefined && !isNaN(ingressIn))
+  if (spanId) caller.spanId = spanId;
+  if (traceparent) caller.traceparent = traceparent;
+  if (seq !== undefined && Number.isFinite(seq)) caller.seq = seq;
+  if (ts !== undefined && Number.isFinite(ts)) caller.ts = ts;
+  if (ingressIn !== undefined && Number.isFinite(ingressIn))
     caller.ingressIn = ingressIn;
 
   // Raw headers escape hatch — copied so consumers don't need to reach into transport.raw.

@@ -62,6 +62,8 @@ Content-Type: application/json
 GET http://localhost:3001/user/123
 ```
 
+`/user/detail` is registered without a method, so it matches any HTTP method (wildcard exact route).
+
 **Note**: Auth endpoints will fail by default because anonymous users have `role: ["none"]`. To test, you'll need to populate `ctx.user` (e.g. in a `.via()` middleware or the `onExec.before` hook) from a JWT or similar. Also note the example registers no `onExec.error` hook, so thrown errors propagate out of `exec()` and Express returns its default 500 error page instead of a JSON envelope.
 
 ## Project Structure

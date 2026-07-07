@@ -2,16 +2,16 @@ import { STATS_INTERVAL_MS, STATS } from "./const";
 
 let prevCpuUsage = process.cpuUsage();
 let prevTime = Date.now();
+let nextSampleAt = 0; // 0 => first call always samples
 
-function updateStats(): void {
+function updateStats(now: number): void {
   // Memory: process RSS in MB
   const memUsage = process.memoryUsage();
   STATS.mem = Math.round(memUsage.rss / 1024 / 1024);
 
-  // CPU: percentage since last check
+  // CPU: percentage since last sample
   const currentCpuUsage = process.cpuUsage(prevCpuUsage);
-  const currentTime = Date.now();
-  const elapsedMs = currentTime - prevTime;
+  const elapsedMs = now - prevTime;
   const safeElapsedMs = elapsedMs > 0 ? elapsedMs : 1;
 
   // CPU time is in microseconds, convert to percentage
@@ -21,17 +21,17 @@ function updateStats(): void {
   STATS.cpu = Math.round(cpuPercent * 100) / 100;
 
   prevCpuUsage = process.cpuUsage();
-  prevTime = currentTime;
+  prevTime = now;
 }
 
 /**
- * Schedules recurring stats updates with self-rescheduling setTimeout.
- * The timer is intentionally not unref'ed, so it keeps the event loop
- * alive (relevant in serverless runtimes).
+ * Refreshes process stats at most once per STATS_INTERVAL_MS.
+ * Called from exec() on the hot path instead of a background timer, so
+ * importing this module has no side effects and nothing keeps the event
+ * loop alive (serverless-safe).
  */
-function scheduleStatsUpdate(): void {
-  updateStats();
-  setTimeout(scheduleStatsUpdate, STATS_INTERVAL_MS);
+export function updateStatsIfStale(now: number): void {
+  if (now < nextSampleAt) return;
+  nextSampleAt = now + STATS_INTERVAL_MS;
+  updateStats(now);
 }
-
-scheduleStatsUpdate();

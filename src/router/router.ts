@@ -7,6 +7,7 @@ import {
   THookDSL,
   LogLevel,
   CtxRouterConfig,
+  EXACT_KEY_DELIMITER,
 } from "./types";
 import { TRouterInstance, createRouterInstance } from "./instance";
 import { exec as execImpl } from "./lifecycle.exec";
@@ -243,6 +244,9 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
 
     // 2. Build pattern by strict concatenation (no implicit delimiters)
     const pattern = this.buildPattern(patternSegments);
+    if (pattern.length === 0) {
+      throw ctxRouterErr.router.EMPTY_ROUTE_PATTERN({ data: { segments } });
+    }
     const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
     // 3. Build primary route
@@ -261,13 +265,21 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
 
   /**
    * Analyzes segments to detect HTTP grammar (method keywords).
-   * Returns extracted HTTP method (if any) and pattern segments.
+   *
+   * Allowed segment forms:
+   * - "pattern"          (no whitespace; taken exactly as provided)
+   * - "METHOD"           (method-only segment, sets the route op)
+   * - "METHOD pattern"   (method token must lead; single pattern token)
+   *
+   * Anything else throws MALFORMED_SEGMENT. A second method token anywhere
+   * in the chain throws MULTIPLE_HTTP_METHODS. Method tokens are matched
+   * case-insensitively and normalized to uppercase.
    */
   private analyzeSegments(segments: string[]): {
     httpOp?: string;
     patternSegments: string[];
   } {
-    const httpMethods = [
+    const httpMethods = new Set([
       "GET",
       "POST",
       "PUT",
@@ -275,43 +287,59 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
       "PATCH",
       "HEAD",
       "OPTIONS",
-    ];
-    const httpOps: string[] = [];
+    ]);
+    const isMethod = (token: string): boolean =>
+      httpMethods.has(token.toUpperCase());
+
+    let httpOp: string | undefined;
+    const setOp = (token: string): void => {
+      if (httpOp) {
+        throw ctxRouterErr.router.MULTIPLE_HTTP_METHODS({
+          data: { segments },
+        });
+      }
+      httpOp = token.toUpperCase();
+    };
+
     const patternSegments: string[] = [];
 
     for (const seg of segments) {
-      // Check if segment contains HTTP grammar
-      const parts = seg.split(/\s+/);
-      const hasMethod = parts.some((p) =>
-        httpMethods.includes(p.toUpperCase())
-      );
-
-      if (hasMethod) {
-        httpOps.push(
-          ...parts.filter((p) => httpMethods.includes(p.toUpperCase()))
-        );
-        const routeParts = parts
-          .filter((p) => !httpMethods.includes(p.toUpperCase()))
-          .filter((p) => p.length > 0);
-        patternSegments.push(...routeParts);
-      } else {
-        patternSegments.push(seg);
+      if (!/\s/.test(seg)) {
+        // Single token: method-only segment or literal pattern piece
+        if (isMethod(seg)) {
+          setOp(seg);
+        } else {
+          patternSegments.push(seg);
+        }
+        continue;
       }
+
+      const tokens = seg.trim().split(/\s+/);
+      const [first, second] = tokens;
+
+      if (tokens.length === 1 && first && isMethod(first)) {
+        // Method token with stray surrounding whitespace
+        setOp(first);
+        continue;
+      }
+
+      if (
+        tokens.length === 2 &&
+        first &&
+        second &&
+        isMethod(first) &&
+        !isMethod(second)
+      ) {
+        setOp(first);
+        patternSegments.push(second);
+        continue;
+      }
+
+      // Whitespace in any other shape is a programmer error
+      throw ctxRouterErr.router.MALFORMED_SEGMENT({ data: { segment: seg } });
     }
 
-    const result: {
-      httpOp?: string;
-      patternSegments: string[];
-    } = {
-      patternSegments,
-    };
-
-    // Only add httpOp if it exists
-    if (httpOps[0]) {
-      result.httpOp = httpOps[0];
-    }
-
-    return result;
+    return httpOp ? { httpOp, patternSegments } : { patternSegments };
   }
 
   /**
@@ -323,23 +351,43 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
 
   /**
    * Adds a route to storage (exact or param).
+   * Registering the same op + pattern twice throws DUPLICATE_ROUTE.
    */
   private addRouteToStorage(route: TRoute<TUserCtx>, segments: string[]): void {
-    const entry: TRouteEntry<TUserCtx> = { route, segments };
+    const entry: TRouteEntry<TUserCtx> = {
+      route,
+      segments,
+      specificity: this.getParamRouteSpecificity(route.pattern),
+    };
 
     // Check if pattern has params
     const hasParams = route.pattern.includes(":");
 
     if (hasParams) {
+      const duplicate = this.paramRoutes.some(
+        (e) => e.route.pattern === route.pattern && e.route.op === route.op
+      );
+      if (duplicate) {
+        throw ctxRouterErr.router.DUPLICATE_ROUTE({
+          data: { op: route.op ?? null, pattern: route.pattern },
+        });
+      }
+
       // Store in paramRoutes array for regex matching (ordered by specificity)
       this.paramRoutes.push(entry);
       this.paramRoutes.sort((a, b) => this.compareParamRouteSpecificity(a, b));
     } else {
       // Store in exactRoutes map for O(1) lookup
-      // Key format: "op:pattern" or ":pattern" (if no op)
+      // Key format: "op\0pattern", or plain "pattern" for op-less (wildcard) routes
       const key = route.op
-        ? `${route.op}:${route.pattern}`
-        : `:${route.pattern}`;
+        ? `${route.op}${EXACT_KEY_DELIMITER}${route.pattern}`
+        : route.pattern;
+
+      if (this.exactRoutes.has(key)) {
+        throw ctxRouterErr.router.DUPLICATE_ROUTE({
+          data: { op: route.op ?? null, pattern: route.pattern },
+        });
+      }
 
       this.exactRoutes.set(key, entry);
     }
@@ -369,8 +417,8 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
     a: TRouteEntry<TUserCtx>,
     b: TRouteEntry<TUserCtx>
   ): number {
-    const aSpec = this.getParamRouteSpecificity(a.route.pattern);
-    const bSpec = this.getParamRouteSpecificity(b.route.pattern);
+    const aSpec = a.specificity;
+    const bSpec = b.specificity;
 
     if (aSpec.staticCount !== bSpec.staticCount) {
       return bSpec.staticCount - aSpec.staticCount; // desc

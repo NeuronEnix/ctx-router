@@ -38,7 +38,7 @@ The npm package itself only ships `src/`; everything else (`examples/`, `tests/`
 │   │   └── index.ts              # (currently empty placeholder)
 │   └── common/
 │       ├── const.ts              # STATS, STATS_INTERVAL_MS
-│       └── helper.ts             # Self-scheduling process CPU/mem sampler (side-effect on import)
+│       └── helper.ts             # Lazy process CPU/mem sampler (updateStatsIfStale, called from exec)
 ├── examples/
 │   └── express/                  # pnpm workspace package: "ctx-router-example-express"
 │       └── src/{server.ts,router.ts,api/**}
@@ -74,19 +74,20 @@ Notes:
 
 Everything exported from `src/index.ts`:
 
-| Export                         | Kind  | Notes                                                                                     |
-| ------------------------------ | ----- | ----------------------------------------------------------------------------------------- |
-| `CtxRouter`                    | class | The router. Generic over `TUserCtx extends TDefaultCtx`.                                  |
-| `DEFAULT_USER_ROLE`            | const | `{ none, user, admin, service }`                                                          |
-| `CtxType.DefaultCtx`           | type  | `TDefaultCtx`                                                                             |
-| `CtxType.CtxConsumerFn<T>`     | type  | `(ctx: T) => T \| Promise<T>` — middleware and handler shape                              |
-| `CtxType.RouteBuilder<T>`      | type  | What `router.route(...)` returns                                                          |
-| `CtxType.RouterError`          | type  | Internal framework error class type                                                       |
-| `CtxType.BaseError`            | type  | Constructor-param shape (`{ name, msg, data?, info? }`) for extending `CtxErr.BaseError`  |
-| `CtxErr.BaseError`             | class | Extend this for your app errors. **Do not throw directly.**                               |
-| `CtxErr.RouterError`           | class | Internal framework error class. App code should not throw this.                           |
-| `CtxErr.errMap`                | fn    | `ctxErrMap(YourErrorClass, { category: { KEY: "msg" } })` — first arg is the error class. |
-| `CtxAdapter.enrichFromExpress` | fn    | `(ctx, req, res) => void` — mutates ctx in place.                                         |
+| Export                                | Kind  | Notes                                                                                     |
+| ------------------------------------- | ----- | ----------------------------------------------------------------------------------------- |
+| `CtxRouter`                           | class | The router. Generic over `TUserCtx extends TDefaultCtx`.                                  |
+| `DEFAULT_USER_ROLE`                   | const | `{ none, user, admin, service }`                                                          |
+| `CtxType.DefaultCtx`                  | type  | `TDefaultCtx`                                                                             |
+| `CtxType.{Req,Res,ResMeta,User,Meta}` | type  | Core ctx member types (`CtxReq`, `CtxRes`, `CtxResMeta`, `CtxUser`, `CtxMeta`)            |
+| `CtxType.CtxConsumerFn<T>`            | type  | `(ctx: T) => T \| Promise<T>` — middleware and handler shape                              |
+| `CtxType.RouteBuilder<T>`             | type  | What `router.route(...)` returns                                                          |
+| `CtxType.RouterError`                 | type  | Internal framework error class type                                                       |
+| `CtxType.BaseError`                   | type  | Constructor-param shape (`{ name, msg, data?, info? }`) for extending `CtxErr.BaseError`  |
+| `CtxErr.BaseError`                    | class | Extend this for your app errors. **Do not throw directly.**                               |
+| `CtxErr.RouterError`                  | class | Internal framework error class. App code should not throw this.                           |
+| `CtxErr.errMap`                       | fn    | `ctxErrMap(YourErrorClass, { category: { KEY: "msg" } })` — first arg is the error class. |
+| `CtxAdapter.enrichFromExpress`        | fn    | `(ctx, req, res) => void` — mutates ctx in place.                                         |
 
 There is no `router.handle({...}, fn)` API. Route registration is exclusively the `.route().via().to()` builder.
 
@@ -124,19 +125,26 @@ There is no `router.handle({...}, fn)` API. Route registration is exclusively th
 adapter creates request → router.newCtx()                # placeholder ctx (id="PENDING", ts=-1)
 adapter enriches ctx     → CtxAdapter.enrichFromExpress  # populates req.{data,route,auth,…}
 router.exec(ctx):
-  └─ assign traceId, seq, inflight, timing
+  └─ assign traceId, seq, inflight, timing; refresh process stats (updateStatsIfStale)
   └─ hook.onExec.before(ctx)
   └─ match route:
-     ├─ exact map lookup keyed by `${op}:${raw}` (O(1))
+     ├─ exact map lookup (O(1)): try `op\0raw`, then op-less `raw` (wildcard)
      └─ otherwise iterate paramRoutes (sorted by specificity)
+        └─ a matcher decode failure (malformed percent-encoding) disqualifies that
+           route; if nothing else matches → MALFORMED_ROUTE_PATH (not HANDLER_NOT_FOUND)
   └─ merge matched :params into ctx.req.data (params have LOWEST priority)
   └─ run middleware chain → handler
   └─ hook.onExec.after(ctx)          # on success
-  └─ catch → hook.onExec.error(ctx, err)
-     ├─ if error hook is registered: swallow, return ctx (response is whatever the hook set)
-     └─ if not registered: re-throw
+  └─ catch → normalize error to CtxBaseError (non-CtxBaseError wrapped as UNKNOWN_ERROR
+     with cause in info), assign to ctx.err, then:
+     ├─ if error hook is registered: pre-fill ctx.res.{code,msg,data} from the
+     │  normalized error (hook may override), call hook.onExec.error(ctx, originalErr),
+     │  swallow, return ctx
+     └─ if not registered: re-throw the original error (ctx.err stays set)
   └─ finally: set ts.out + execTime, decrement inflight, hook.onExec.finally(ctx)
 ```
+
+Timing fields sourced from caller hints (`ts.clientIn`, `ts.ingressIn`, `ts.owd`) are `-1` when the hints are absent — never fake fallback values.
 
 `ctx` is mutated in place throughout. Middleware and handlers must return the same `ctx` they received (returning a new object will work but is not the convention used in the codebase).
 
@@ -152,7 +160,7 @@ router.exec(ctx):
 
 ### Process stats
 
-Importing `src/router/lifecycle.exec.ts` (transitively) imports `src/common/helper.ts`, which **starts a self-rescheduling `setTimeout` on module load** to sample CPU and memory every `STATS_INTERVAL_MS` (5000ms). The timer is intentionally not `unref()`ed in current code. Be aware when the package is consumed in serverless cold-start scenarios.
+`src/common/helper.ts` exposes `updateStatsIfStale(now)`, which `exec()` calls at the start of each request; it samples process CPU/mem at most once per `STATS_INTERVAL_MS` (5000ms). There is **no background timer and no import-time side effect** (so `"sideEffects": false` in package.json is accurate and nothing keeps the event loop alive in serverless runtimes). `ctx.meta.instance.cpu/mem` stay `-1` until the first `exec()` samples them.
 
 ## Route builder DSL — semantics that aren't obvious
 
@@ -166,12 +174,14 @@ userScope.route("GET /:id").to(api.user.detail);
 Things to know:
 
 - **Strict concatenation, no implicit delimiter.** `route("/user").route("/:id")` ⇒ `"/user/:id"`, but `route("user").route(":id")` ⇒ `"user:id"` (no `/` inserted). Choose your delimiter in the segment string.
-- **HTTP grammar auto-detection.** Whitespace-split each segment; tokens that case-insensitively match `GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS` become the route's `op`, the rest are joined into the pattern. So `route("GET /user/:id")` ⇒ pattern `/user/:id`, op `GET`. Only the first method token is kept as op.
+- **HTTP grammar (strict).** A segment may be `pattern` (no whitespace), `METHOD` (method-only), or `METHOD pattern` (method token leading, single pattern token). Method tokens (`GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS`) are matched case-insensitively and normalized to an uppercase `op`. Any other whitespace shape throws `MALFORMED_SEGMENT` (so `route("/files delete")` is rejected, not registered as `DELETE /files`). A second method token anywhere in the chain throws `MULTIPLE_HTTP_METHODS`; a chain with only a method and no pattern throws `EMPTY_ROUTE_PATTERN`.
+- **Duplicate registration throws.** Registering the same op + pattern twice throws `DUPLICATE_ROUTE` — no silent overwrite or shadowing.
+- **Op-less routes are wildcards.** Routes registered without a method match any `op` (exact and param patterns alike); an op-specific exact route wins over an op-less one for the same raw. A request without an `op` only matches op-less routes.
 - **Cartesian variant expansion.** `route("/user", "user").route("GET /:id", ".:id")` registers the handler under **all four** segment combinations. Use this when you want the same handler reachable via multiple syntaxes (e.g. slash form + dot form).
 - **Builder is immutable.** Each `.route()` / `.via()` returns a new builder; the original is unaffected. Reuse safely.
 - **`router.via(...)` returns a restricted scope** with only `route` and `via` exposed (no direct `.to()`) — you must `.route(...)` before terminating with `.to(handler)`.
 - **Param precedence at runtime.** The Express adapter does `{ ...req.params, ...req.query, ...req.body }`, so for any key collision **body overrides query, and query overrides path params** (last spread wins — body is the highest-priority input). Then on match, the router does `{ ...matchedParams, ...ctx.req.data }`, so router-extracted `:params` have the _lowest_ priority — anything already in `ctx.req.data` with the same key wins. New adapters should follow the same priority for parity.
-- **Pattern storage.** No-`:` patterns go into an exact `Map` keyed by `"op:pattern"` (or `":pattern"` if no op). Patterns with `:` are sorted by (more static chars > fewer params > longer pattern > lexical) and matched in order.
+- **Pattern storage.** No-`:` patterns go into an exact `Map` keyed by `"op\0pattern"` (or plain `"pattern"` for op-less wildcard routes; `\0` is `EXACT_KEY_DELIMITER` in `router/types.ts`). Patterns with `:` are sorted by (more static chars > fewer params > longer pattern > lexical) and matched in order; specificity is computed once at registration and cached on the entry.
 
 ## Handler convention
 
@@ -220,7 +230,8 @@ throw appErr.auth.UNAUTHORIZED({ data: { userId }, info: { ip } });
 
 - `CtxBaseError` instances expose `{ name, message, data, info, stack }`.
 - `data` is client-safe (intended to be sent in `ctx.res.data`); `info` is server-side-only debugging context.
-- `CtxRouterError` is internal (thrown via `ctxRouterErr` for framework conditions like `HANDLER_NOT_FOUND`, `HOOKS_ALREADY_SEALED`, `INVALID_ROUTE_SEGMENT`, etc.). Distinguish in your error hook with `instanceof` if you want different handling.
+- `CtxRouterError` is internal (thrown via `ctxRouterErr` for framework conditions like `HANDLER_NOT_FOUND`, `MALFORMED_ROUTE_PATH`, `HOOKS_ALREADY_SEALED`, `DUPLICATE_ROUTE`, `MULTIPLE_HTTP_METHODS`, `MALFORMED_SEGMENT`, etc.). Distinguish in your error hook with `instanceof` if you want different handling (e.g. map `HANDLER_NOT_FOUND` to 404).
+- `exec()` normalizes every caught error to a `CtxBaseError` (wrapping non-`CtxBaseError` values as `UNKNOWN_ERROR`), assigns it to `ctx.err`, and — when an error hook is registered — pre-fills `ctx.res.{code,msg,data}` from it before the hook runs.
 
 ## Adding a new transport adapter
 
@@ -235,13 +246,13 @@ Required:
 Optional:
 
 - `ctx.req.auth` — extract any standard credentials you can.
-- `ctx.req.caller` — extract caller-provided identity (appVersion, apiVersion, sessionId, deviceId) and per-call correlation (traceId, spanId, seq, ts, ingressIn, traceparent) hints.
+- `ctx.req.caller` — extract caller-provided identity (appVersion, apiVersion, sessionId, deviceId) and per-call correlation (traceId, spanId, seq, ts, ingressIn, traceparent) hints. Numeric hints (`ts`, `ingressIn`, `seq`) are epoch-ms / plain numbers parsed strictly with `Number()` — malformed values are dropped, never truncated.
 
 Reference: `src/adapter/express.v5.ts` (note: its signature is `(ctx, req, res)` because it stashes the response object in `transport.raw` for downstream use). Export new adapters from `src/index.ts` under the `CtxAdapter` namespace.
 
 ## TypeScript config (notes that affect edits)
 
-- `target: ES2021`, `module/moduleResolution: NodeNext`, ESM-aware (`"sideEffects": false` is set in `package.json` despite `common/helper.ts` having a side effect — keep that in mind if you ever break tree-shakability further).
+- `target: ES2021`, `module/moduleResolution: NodeNext`, ESM-aware. `"sideEffects": false` is set in `package.json` and is accurate — no module in `src/` has import-time side effects; keep it that way.
 - `strict` plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`. Optional properties must be conditionally assigned (see how `enrichFromExpress` only assigns `auth`/`client`/`caller` when non-empty).
 - `experimentalDecorators` + `emitDecoratorMetadata` are on, but not currently used in `src/`.
 

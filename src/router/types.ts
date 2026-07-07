@@ -1,6 +1,10 @@
 import { MatchFunction } from "path-to-regexp";
 import { TDefaultCtx } from "../core";
 
+// Delimiter for exact-route keys. "\0" cannot appear in ops or patterns,
+// so op-keyed entries can never collide with op-less (plain pattern) keys.
+export const EXACT_KEY_DELIMITER = "\0";
+
 export type TRoute<TUserCtx extends TDefaultCtx> = {
   op?: string; // Optional: HTTP method, event name, etc.
   pattern: string; // Pattern with :params (identity)
@@ -11,6 +15,8 @@ export type TRoute<TUserCtx extends TDefaultCtx> = {
 export type TRouteEntry<TUserCtx extends TDefaultCtx> = {
   route: TRoute<TUserCtx>;
   segments: string[]; // Track original segments for logging
+  // Computed once at registration so sorting never re-derives it
+  specificity: { staticCount: number; paramCount: number; len: number };
 };
 
 // Side-effect hooks - mutate ctx directly, no return needed

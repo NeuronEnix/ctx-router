@@ -131,11 +131,14 @@ Routes are built via an immutable fluent DSL: `route()` → `via()` → `to()`.
 router.route(segment).via(mw1, mw2).to(handler);
 ```
 
-**HTTP grammar auto-detection.** Whitespace-split each segment; tokens case-insensitively matching `GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS` become the route's `op` (only the first method token is kept), the rest is the pattern.
+**HTTP grammar (strict).** A segment is either a `pattern` (no whitespace), a bare `METHOD`, or `"METHOD pattern"` — the method token must come first and is matched case-insensitively (`get /user` ⇒ op `GET`). Anything else throws at registration: a non-leading method token or extra whitespace throws `MALFORMED_SEGMENT`, and declaring two methods in one chain throws `MULTIPLE_HTTP_METHODS`.
 
 ```typescript
 router.route("GET /user/:id"); // op: "GET", pattern: "/user/:id"
+router.route("/files delete"); // throws MALFORMED_SEGMENT
 ```
+
+**Wildcards & duplicates.** Routes registered without a method match any `op`; an op-specific route wins over the wildcard for the same path. Registering the same op + pattern twice throws `DUPLICATE_ROUTE`.
 
 **Strict concatenation & variants.** Chained `route()` calls concatenate segments exactly as written — no implicit `/`. Passing multiple segments to one `route()` call registers the handler under every combination (cartesian product across chained calls).
 
@@ -159,7 +162,7 @@ userScope.route("POST /update").to(api.user.update);
 router.via(logMw, metricsMw).route("GET /health").to(api.health.ping);
 ```
 
-**Path parameters.** Patterns with `:param` are matched via `path-to-regexp`; extracted params are merged into `ctx.req.data` with the lowest priority (anything in body/query wins).
+**Path parameters.** Patterns with `:param` are matched via `path-to-regexp`; extracted params are merged into `ctx.req.data` with the lowest priority (anything in body/query wins). A request path whose percent-encoding can't be decoded fails with `MALFORMED_ROUTE_PATH` (a `CtxErr.RouterError`) instead of a generic not-found.
 
 ```typescript
 router.route("GET /user/:userId/post/:postId").to(async (ctx) => {
@@ -189,7 +192,7 @@ Execution order: `before` → route match → middleware → handler → `after`
 
 Hooks are **sealed on the first `exec()` call** — register them during startup.
 
-If `onExec.error` is registered, exec swallows the error and returns ctx (your hook writes the response). Without it, exec re-throws (fail-fast).
+Every caught error is normalized to a `CtxErr.BaseError` (unknown values are wrapped as `UNKNOWN_ERROR`) and set on `ctx.err`. If `onExec.error` is registered, exec pre-fills `ctx.res.{code,msg,data}` from the error, runs your hook (which may override the response), swallows the error, and returns ctx. Without the hook, exec re-throws (fail-fast) — `ctx.err` is still set.
 
 ## Error handling
 
@@ -217,21 +220,19 @@ throw appErr.user.NOT_FOUND({
 
 `CtxErr.BaseError` instances expose `{ name, message, data, info, stack }` — the constructor takes `msg`, which becomes the standard `Error#message`. `data` is intended for `ctx.res.data`; `info` stays server-side.
 
-Shape the response in the error hook:
+Shape the response in the error hook. `ctx.err` is already set and `ctx.res.{code,msg,data}` are pre-filled from the error, so you only override what you need:
 
 ```typescript
 router.hook.onExec.error(async (ctx, err) => {
-  if (err instanceof AppErr) {
-    ctx.res.code = err.name;
-    ctx.res.msg = err.message;
-    ctx.res.data = err.data;
-  } else {
-    ctx.res.code = "UNKNOWN_ERROR";
-    ctx.res.msg = "An unexpected error occurred";
+  // Framework errors are CtxErr.RouterError — e.g. map not-found to your own code
+  if (err instanceof CtxErr.RouterError && err.name === "HANDLER_NOT_FOUND") {
+    ctx.res.code = "NOT_FOUND";
+    ctx.res.msg = "Route not found";
   }
-  ctx.err = err;
 });
 ```
+
+Your adapter can then map `ctx.res.code` to a transport status (`NOT_FOUND` → 404, `MALFORMED_ROUTE_PATH` → 400, …).
 
 ## Express adapter
 
@@ -245,7 +246,7 @@ The adapter populates `ctx.req` from the Express request:
 - **`data`** — merged `params + query + body` (body wins on collisions)
 - **`route`** — `op: req.method`, `raw: req.path`
 - **`auth`** — `Authorization: Bearer …` (→ `bearerToken`) or `Authorization: Basic …` (→ `clientId`/`clientSecret`); API key from `x-ctx-api-key` / `x-api-key` / `apikey` (first match); `x-ctx-refresh-token`
-- **`caller`** — identity (`x-ctx-app-version`, `x-ctx-api-version`, `x-ctx-session-id`, `x-ctx-device-id`) plus correlation hints (`x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-client-ts`, `x-ctx-ingress-in`)
+- **`caller`** — identity (`x-ctx-app-version`, `x-ctx-api-version`, `x-ctx-session-id`, `x-ctx-device-id`) plus correlation hints (`x-ctx-trace-id`, `x-ctx-span-id`, `traceparent`, `x-ctx-seq`, `x-ctx-client-ts`, `x-ctx-ingress-in`). Numeric headers (`x-ctx-client-ts`, `x-ctx-ingress-in`, `x-ctx-seq`) are epoch-ms / plain numbers — non-numeric values are dropped.
 - **`transport`** — `protocol: "http"`, `framework: "express"`, `request: { method, path }`, headers copied into `transport.data.headers`, client IP/hops in `network`, native `req`/`res` stashed in `raw`
 
 ## Adding a new transport
@@ -260,14 +261,14 @@ See [`src/adapter/express.v5.ts`](./src/adapter/express.v5.ts) as a reference.
 
 ## API surface
 
-| Export                         | Notes                                                  |
-| ------------------------------ | ------------------------------------------------------ |
-| `CtxRouter`                    | Generic over `TUserCtx extends TDefaultCtx`            |
-| `DEFAULT_USER_ROLE`            | `{ none, user, admin, service }`                       |
-| `CtxType.*`                    | `DefaultCtx`, `CtxConsumerFn<T>`, `RouteBuilder<T>`, … |
-| `CtxErr.BaseError`             | Extend this for your app errors                        |
-| `CtxErr.errMap`                | Build a typed, category-organized error factory        |
-| `CtxAdapter.enrichFromExpress` | `(ctx, req, res) => void`, mutates in place            |
+| Export                         | Notes                                                                                           |
+| ------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `CtxRouter`                    | Generic over `TUserCtx extends TDefaultCtx`                                                     |
+| `DEFAULT_USER_ROLE`            | `{ none, user, admin, service }`                                                                |
+| `CtxType.*`                    | `DefaultCtx`, `Req`, `Res`, `ResMeta`, `User`, `Meta`, `CtxConsumerFn<T>`, `RouteBuilder<T>`, … |
+| `CtxErr.BaseError`             | Extend this for your app errors                                                                 |
+| `CtxErr.errMap`                | Build a typed, category-organized error factory                                                 |
+| `CtxAdapter.enrichFromExpress` | `(ctx, req, res) => void`, mutates in place                                                     |
 
 `CtxRouter` methods: `newCtx(protocol?)`, `exec(ctx)`, `route(...segments)`, `via(...mws)`, plus the `hook` DSL.
 

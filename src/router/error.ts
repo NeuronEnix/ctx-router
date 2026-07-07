@@ -354,8 +354,16 @@ export const ctxRouterErr = ctxErrMap(CtxRouterError, {
     MISSING_SEGMENTS:
       "Cannot register handler without segments. Use .route(segment) first.",
     MISSING_HANDLER: "Cannot register route without handler. Use .to(handler).",
+    MALFORMED_SEGMENT:
+      "Route segment must be 'pattern', 'METHOD', or 'METHOD pattern' (single pattern token, method token leading)",
+    MULTIPLE_HTTP_METHODS:
+      "Route chain declares more than one HTTP method token",
+    DUPLICATE_ROUTE: "Route already registered for this op and pattern",
+    EMPTY_ROUTE_PATTERN:
+      "Route pattern is empty. Segments contained only an HTTP method.",
   },
   handler: {
     HANDLER_NOT_FOUND: "Handler not found",
+    MALFORMED_ROUTE_PATH: "Malformed percent-encoding in route path",
   },
 });

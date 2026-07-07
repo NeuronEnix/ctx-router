@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CtxRouter } from "../src/router/router";
+import { CtxBaseError, CtxRouterError } from "../src/router/error";
 import { TDefaultCtx } from "../src/core";
 
 function setRoute(
@@ -447,6 +448,212 @@ describe("CtxRouter", () => {
         name: "HANDLER_NOT_FOUND",
       });
     });
+
+    it("op-less exact routes match any operation (wildcard)", async () => {
+      router.route("/user/detail").to(async (ctx) => {
+        ctx.res.data = { op: ctx.req.route.op ?? null };
+        return ctx;
+      });
+
+      const getCtx = router.newCtx();
+      setRoute(getCtx, "GET", "/user/detail");
+      await router.exec(getCtx);
+      expect(getCtx.res.data).toEqual({ op: "GET" });
+
+      const postCtx = router.newCtx();
+      setRoute(postCtx, "POST", "/user/detail");
+      await router.exec(postCtx);
+      expect(postCtx.res.data).toEqual({ op: "POST" });
+
+      const noOpCtx = router.newCtx();
+      setRoute(noOpCtx, undefined, "/user/detail");
+      await router.exec(noOpCtx);
+      expect(noOpCtx.res.data).toEqual({ op: null });
+    });
+
+    it("op-specific exact route wins over op-less exact route", async () => {
+      router.route("/status").to(async (ctx) => {
+        ctx.res.data = { matched: "wildcard" };
+        return ctx;
+      });
+      router.route("GET /status").to(async (ctx) => {
+        ctx.res.data = { matched: "get" };
+        return ctx;
+      });
+
+      const getCtx = router.newCtx();
+      setRoute(getCtx, "GET", "/status");
+      await router.exec(getCtx);
+      expect(getCtx.res.data).toEqual({ matched: "get" });
+
+      const postCtx = router.newCtx();
+      setRoute(postCtx, "POST", "/status");
+      await router.exec(postCtx);
+      expect(postCtx.res.data).toEqual({ matched: "wildcard" });
+    });
+  });
+
+  describe("Route registration validation", () => {
+    const handler = async (ctx: TDefaultCtx) => ctx;
+
+    it("throws MULTIPLE_HTTP_METHODS when a chain declares more than one method", () => {
+      expect(() =>
+        router.route("GET /user").route("POST /:id").to(handler)
+      ).toThrow("more than one HTTP method");
+    });
+
+    it("throws when a method token is not in leading position", () => {
+      expect(() => router.route("/files delete").to(handler)).toThrow(
+        "Route segment must be"
+      );
+    });
+
+    it("throws on a segment with multiple pattern tokens", () => {
+      expect(() => router.route("GET /user /detail").to(handler)).toThrow(
+        "Route segment must be"
+      );
+    });
+
+    it("throws EMPTY_ROUTE_PATTERN when segments contain only a method", () => {
+      expect(() => router.route("GET").to(handler)).toThrow(
+        "Route pattern is empty"
+      );
+    });
+
+    it("normalizes lowercase method tokens to uppercase op", async () => {
+      router.route("get /lower").to(async (ctx) => {
+        ctx.res.data = { matched: true };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/lower");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: true });
+    });
+
+    it("throws DUPLICATE_ROUTE when the same exact route is registered twice", () => {
+      router.route("GET /dup").to(handler);
+      expect(() => router.route("GET /dup").to(handler)).toThrow(
+        "already registered"
+      );
+    });
+
+    it("throws DUPLICATE_ROUTE when the same param route is registered twice", () => {
+      router.route("GET /dup/:id").to(handler);
+      expect(() => router.route("GET /dup/:id").to(handler)).toThrow(
+        "already registered"
+      );
+    });
+
+    it("allows the same pattern under different ops", () => {
+      router.route("GET /same").to(handler);
+      expect(() => router.route("POST /same").to(handler)).not.toThrow();
+    });
+  });
+
+  describe("Malformed route path", () => {
+    it("throws MALFORMED_ROUTE_PATH for undecodable percent-encoding", async () => {
+      router.route("GET /file/:name").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/file/100%");
+
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "MALFORMED_ROUTE_PATH",
+      });
+    });
+
+    it("still matches a later route when an earlier matcher fails to decode", async () => {
+      // "/files/:x" captures "100%" and fails to decode; "/:y/100%" matches cleanly
+      router.route("/files/:x").to(async (ctx) => {
+        ctx.res.data = { matched: "x" };
+        return ctx;
+      });
+      router.route("/:y/100%").to(async (ctx) => {
+        ctx.res.data = { matched: "y", y: (ctx.req.data as any).y };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, undefined, "/files/100%");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "y", y: "files" });
+    });
+  });
+
+  describe("Error normalization", () => {
+    class TestAppErr extends CtxBaseError {}
+
+    it("sets ctx.err and pre-fills res from a thrown CtxBaseError when error hook is registered", async () => {
+      const thrown = new TestAppErr({
+        name: "MY_ERROR",
+        msg: "boom",
+        data: { a: 1 },
+      });
+      router.hook.onExec.error(async () => {});
+      router.route("GET /fail").to(async () => {
+        throw thrown;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await router.exec(ctx);
+
+      expect(ctx.err).toBe(thrown);
+      expect(ctx.res.code).toBe("MY_ERROR");
+      expect(ctx.res.msg).toBe("boom");
+      expect(ctx.res.data).toEqual({ a: 1 });
+    });
+
+    it("wraps non-CtxBaseError values as UNKNOWN_ERROR router error", async () => {
+      let hookErr: unknown;
+      router.hook.onExec.error(async (_ctx, error) => {
+        hookErr = error;
+      });
+      const original = new Error("kaput");
+      router.route("GET /fail").to(async () => {
+        throw original;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await router.exec(ctx);
+
+      expect(hookErr).toBe(original);
+      expect(ctx.err).toBeInstanceOf(CtxRouterError);
+      expect(ctx.err?.name).toBe("UNKNOWN_ERROR");
+      expect(ctx.res.code).toBe("UNKNOWN_ERROR");
+    });
+
+    it("lets the error hook override the pre-filled response", async () => {
+      router.hook.onExec.error(async (ctx) => {
+        ctx.res.code = "CUSTOM";
+        ctx.res.msg = "custom msg";
+      });
+      router.route("GET /fail").to(async () => {
+        throw new Error("kaput");
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await router.exec(ctx);
+
+      expect(ctx.res.code).toBe("CUSTOM");
+      expect(ctx.res.msg).toBe("custom msg");
+    });
+
+    it("re-throws and still sets ctx.err when no error hook is registered", async () => {
+      const original = new Error("kaput");
+      router.route("GET /fail").to(async () => {
+        throw original;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await expect(router.exec(ctx)).rejects.toBe(original);
+      expect(ctx.err?.name).toBe("UNKNOWN_ERROR");
+    });
   });
 
   describe("Cross-transport params", () => {
@@ -506,9 +713,48 @@ describe("CtxRouter", () => {
       await router.exec(ctx);
 
       expect(ctx.meta.ts.in).toBeGreaterThan(0);
-      expect(ctx.meta.ts.ingressIn).toBeGreaterThan(0);
       expect(ctx.meta.ts.out).toBeGreaterThan(0);
       expect(ctx.meta.ts.execTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it("sets clientIn, ingressIn, and owd to -1 when caller hints are absent", async () => {
+      router.route("GET /test").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/test");
+
+      await router.exec(ctx);
+
+      expect(ctx.meta.ts.clientIn).toBe(-1);
+      expect(ctx.meta.ts.ingressIn).toBe(-1);
+      expect(ctx.meta.ts.owd).toBe(-1);
+    });
+
+    it("computes clientIn, ingressIn, and owd from caller hints when provided", async () => {
+      router.route("GET /timed").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/timed");
+      const clientTs = Date.now() - 50;
+      ctx.req.caller = { ts: clientTs, ingressIn: clientTs + 10 };
+
+      await router.exec(ctx);
+
+      expect(ctx.meta.ts.clientIn).toBe(clientTs);
+      expect(ctx.meta.ts.ingressIn).toBe(clientTs + 10);
+      expect(ctx.meta.ts.owd).toBeGreaterThanOrEqual(50);
+    });
+
+    it("populates cpu/mem stats during exec", async () => {
+      router.route("GET /test").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/test");
+
+      await router.exec(ctx);
+
+      expect(ctx.meta.instance.mem).toBeGreaterThan(0);
+      expect(ctx.meta.instance.cpu).toBeGreaterThanOrEqual(0);
     });
 
     it("sets response meta after execution", async () => {
