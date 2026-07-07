@@ -131,10 +131,18 @@ Routes are built via an immutable fluent DSL: `route()` → `via()` → `to()`.
 router.route(segment).via(mw1, mw2).to(handler);
 ```
 
-**HTTP grammar auto-detection.** Whitespace-split each segment; tokens matching `GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS` become the route's `op`, the rest is the pattern.
+**HTTP grammar auto-detection.** Whitespace-split each segment; tokens case-insensitively matching `GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS` become the route's `op` (only the first method token is kept), the rest is the pattern.
 
 ```typescript
 router.route("GET /user/:id"); // op: "GET", pattern: "/user/:id"
+```
+
+**Strict concatenation & variants.** Chained `route()` calls concatenate segments exactly as written — no implicit `/`. Passing multiple segments to one `route()` call registers the handler under every combination (cartesian product across chained calls).
+
+```typescript
+router.route("/user").route("/:id"); // pattern "/user/:id"
+router.route("user.").route(":id"); // pattern "user.:id" — no "/" inserted
+router.route("/user", "user").route("/:id", ".:id"); // all 4 combinations
 ```
 
 **Scoped builders.** Each `.route()`/`.via()` returns a new builder — reuse parents to share middleware.
@@ -207,7 +215,7 @@ throw appErr.user.NOT_FOUND({
 });
 ```
 
-`CtxErr.BaseError` instances expose `{ name, msg, data, info }`. `data` is intended for `ctx.res.data`; `info` stays server-side.
+`CtxErr.BaseError` instances expose `{ name, message, data, info, stack }` — the constructor takes `msg`, which becomes the standard `Error#message`. `data` is intended for `ctx.res.data`; `info` stays server-side.
 
 Shape the response in the error hook:
 
@@ -238,7 +246,7 @@ The adapter populates `ctx.req` from the Express request:
 - **`route`** — `op: req.method`, `raw: req.path`
 - **`auth`** — `Authorization: Bearer …` (→ `bearerToken`) or `Authorization: Basic …` (→ `clientId`/`clientSecret`); API key from `x-ctx-api-key` / `x-api-key` / `apikey` (first match); `x-ctx-refresh-token`
 - **`caller`** — identity (`x-ctx-app-version`, `x-ctx-api-version`, `x-ctx-session-id`, `x-ctx-device-id`) plus correlation hints (`x-ctx-trace-id`, `x-ctx-seq`, `x-ctx-client-ts`, `x-ctx-ingress-in`)
-- **`transport`** — `protocol: "http"`, `framework: "express"`, native `req`/`res` stashed in `raw`
+- **`transport`** — `protocol: "http"`, `framework: "express"`, `request: { method, path }`, headers copied into `transport.data.headers`, client IP/hops in `network`, native `req`/`res` stashed in `raw`
 
 ## Adding a new transport
 
@@ -261,7 +269,7 @@ See [`src/adapter/express.v5.ts`](./src/adapter/express.v5.ts) as a reference.
 | `CtxErr.errMap`                | Build a typed, category-organized error factory        |
 | `CtxAdapter.enrichFromExpress` | `(ctx, req, res) => void`, mutates in place            |
 
-`CtxRouter` methods: `newCtx()`, `exec(ctx)`, `route(...segments)`, `via(...mws)`, plus the `hook` DSL.
+`CtxRouter` methods: `newCtx(protocol?)`, `exec(ctx)`, `route(...segments)`, `via(...mws)`, plus the `hook` DSL.
 
 ## Contributing
 

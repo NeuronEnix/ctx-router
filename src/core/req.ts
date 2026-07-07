@@ -19,7 +19,9 @@ export type CtxReq<Data = Record<string, unknown>> = {
      * - For HTTP: method (GET, POST, etc.)
      * - For events: event name
      * - For gRPC: RPC method name
-     * If undefined, routes without op act as wildcard matches.
+     * Routes registered without an op act as wildcards only for param
+     * patterns (containing ":"). Exact (param-less) patterns registered
+     * without an op only match requests whose op is also undefined.
      */
     op?: string;
 

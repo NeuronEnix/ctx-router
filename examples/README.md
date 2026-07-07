@@ -55,8 +55,8 @@ examples/express/
 To add a new example (e.g., `lambda`):
 
 1. Create directory: `examples/lambda`
-2. Add `package.json` with `"ctx-router": "*"` dependency
-3. Implement transformer and handlers
+2. Add `package.json` with `"ctx-router": "workspace:*"` dependency
+3. Implement the adapter enrichment and handlers
 4. The workspace will automatically link to the local `ctx-router`
 
 ## Why Separate Examples?

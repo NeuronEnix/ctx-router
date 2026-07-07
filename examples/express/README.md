@@ -4,11 +4,11 @@ Basic Express HTTP server using ctx-router.
 
 ## Features Demonstrated
 
-- ✅ HTTP request transformation (`toCtx.fromExpress`)
-- ✅ Route registration with patterns (`/user/:userId`)
+- ✅ HTTP request enrichment (`CtxAdapter.enrichFromExpress`)
+- ✅ Route registration with the `.route().via().to()` builder (`/user/:userId`)
 - ✅ Path parameter extraction
 - ✅ Role-based authorization
-- ✅ Error handling with `CtxError`
+- ✅ Error handling with `CtxErr.BaseError` + `CtxErr.errMap`
 - ✅ Health check endpoints
 - ✅ 3-function handler pattern (auth, validate, execute)
 
@@ -42,6 +42,8 @@ Server runs on `http://localhost:3001`
 GET http://localhost:3001/health/ping
 ```
 
+`GET /health/ping-log` serves the same handler with logging + auth middleware chained via `.via()`.
+
 ### User Update (Requires Auth)
 
 ```bash
@@ -60,7 +62,7 @@ Content-Type: application/json
 GET http://localhost:3001/user/123
 ```
 
-**Note**: Auth endpoints will fail by default because anonymous users have `role: ["none"]`. To test, you'll need to modify the transformer to populate `ctx.user` from JWT or similar.
+**Note**: Auth endpoints will fail by default because anonymous users have `role: ["none"]`. To test, you'll need to populate `ctx.user` (e.g. in a `.via()` middleware or the `onExec.before` hook) from a JWT or similar. Also note the example registers no `onExec.error` hook, so thrown errors propagate out of `exec()` and Express returns its default 500 error page instead of a JSON envelope.
 
 ## Project Structure
 
@@ -69,6 +71,7 @@ src/
 ├── server.ts                    # Express server setup
 ├── router.ts                    # Router configuration
 └── api/
+    ├── index.ts                # API namespace exports
     ├── health/
     │   ├── healthPing.api.ts   # Health check handler
     │   └── index.ts            # Health exports
@@ -102,22 +105,27 @@ export async function execute(reqData: TReqData): Promise<TResData> {
 }
 ```
 
-The router automatically chains them: `auth → validate → execute`
+The chaining is done manually by the composer in each `api/*/index.ts`:
+
+```typescript
+ctx.res.data = await auth(ctx).then(validate).then(execute);
+```
 
 ## Key Files
 
 ### `server.ts`
 
 - Sets up Express
-- Transforms all requests to CTX using `toCtx.fromExpress(req)`
+- Per request: creates a ctx with `router.newCtx()`, enriches it with `CtxAdapter.enrichFromExpress(ctx, req, res)`, then runs `router.exec(ctx)`
+- Registers an `onExec.before` hook at startup
 - Maps CTX response codes to HTTP status codes
 - Returns JSON response
 
 ### `router.ts`
 
 - Creates `CtxRouter` instance
-- Defines custom error map with `ctxErrMap()`
-- Registers routes with patterns
+- Defines custom error map with `CtxErr.errMap()`
+- Registers routes with the `.route().via().to()` builder
 
 ### `api/*/index.ts`
 
@@ -133,14 +141,7 @@ The router automatically chains them: `auth → validate → execute`
 
 ```typescript
 import * as product from "./api/product";
-router.handle(
-  {
-    protocol: "http",
-    op: "POST",
-    pattern: "/product",
-  },
-  product.create
-);
+router.route("POST /product").to(product.create);
 ```
 
 ## Testing with curl
@@ -162,4 +163,4 @@ curl http://localhost:3001/user/123
 
 - This example installs `ctx-router` from the workspace (local version)
 - It only uses the public API (`import ... from "ctx-router"`) — no internal imports
-- For local development, run `pnpm build -w` (or `pnpm build` after changes) so the example picks up updates from `../../dist`
+- For local development, rebuild the library after changes (`pnpm build` from the repo root, or `pnpm -w build` from here) — the example resolves `ctx-router` to `../../dist`, and nodemon watches that directory for reloads

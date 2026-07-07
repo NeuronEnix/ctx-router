@@ -26,7 +26,8 @@ function updateStats(): void {
 
 /**
  * Schedules recurring stats updates with self-rescheduling setTimeout.
- * Timer is unref'ed so it does not keep serverless runtimes alive.
+ * The timer is intentionally not unref'ed, so it keeps the event loop
+ * alive (relevant in serverless runtimes).
  */
 function scheduleStatsUpdate(): void {
   updateStats();

@@ -66,8 +66,8 @@ pnpm format        # prettier --write src
 Notes:
 
 - The example app is a workspace package; it imports `ctx-router` via `workspace:*` and is hot-reloaded by `nodemon`.
-- Husky runs `lint-staged` on pre-commit (lint + format on staged files).
-- `pnpm prepublishOnly` / `prepack` run `build:clean` + `test`.
+- Husky pre-commit runs `lint-staged` (prettier + eslint on staged files), then `pnpm build` and `pnpm test` — any failure aborts the commit.
+- `pnpm prepublishOnly` runs `build:clean` + `test`; `prepack` runs `build:clean` only.
 - `noEmitOnError: true` — TS errors fail the build.
 
 ## Public API surface
