@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/NeuronEnix/ctx-router/compare/v0.5.0...v0.6.0) (2026-08-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* **router:** `*` and `{}` in route patterns are now path-to-regexp syntax rather than literal characters; malformed numeric caller headers are dropped instead of coerced; a failed .to() batch registers none of its variants; owd is never negative.
+
+### Bug Fixes
+
+* **router:** route-matching precedence, splat/optional-group support, exec lifecycle hardening ([26113c5](https://github.com/NeuronEnix/ctx-router/commit/26113c5e891775a9fe78c40d897a6628660c537f))
+
 ## [0.5.0](https://github.com/NeuronEnix/ctx-router/compare/v0.4.2...v0.5.0) (2026-05-17)
 
 
