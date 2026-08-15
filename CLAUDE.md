@@ -45,6 +45,7 @@ The npm package itself only ships `src/`; everything else (`examples/`, `tests/`
 ├── tests/                        # Vitest suite (not co-located)
 │   ├── router.test.ts
 │   ├── error.test.ts
+│   ├── stats.test.ts
 │   └── adapter/express.v5.test.ts
 ├── feat.backlog.md               # Planned feature backlog - check before proposing big ideas
 ├── CHANGELOG.md                  # Maintained by release-please
@@ -132,21 +133,25 @@ router.exec(ctx):
      └─ otherwise iterate paramRoutes (sorted by specificity)
         └─ a matcher decode failure (malformed percent-encoding) disqualifies that
            route; if nothing else matches → MALFORMED_ROUTE_PATH (not HANDLER_NOT_FOUND)
-  └─ merge matched :params into ctx.req.data (params have LOWEST priority)
+  └─ merge matched :params / *splats into ctx.req.data (params have LOWEST priority;
+     :param values are strings, *splat values are string[] of decoded segments)
   └─ run middleware chain → handler
+     └─ every step's return value is checked (assertCtxReturn); a non-ctx return
+        throws INVALID_HANDLER_RETURN instead of clobbering the ctx reference
   └─ hook.onExec.after(ctx)          # on success
   └─ catch → normalize error to CtxBaseError (non-CtxBaseError wrapped as UNKNOWN_ERROR
-     with cause in info), assign to ctx.err, then:
+     with the ORIGINAL thrown value at info.cause), assign to ctx.err, then:
      ├─ if error hook is registered: pre-fill ctx.res.{code,msg,data} from the
-     │  normalized error (hook may override), call hook.onExec.error(ctx, originalErr),
+     │  normalized error (res.data is a shallow copy, hook may override),
+     │  call hook.onExec.error(ctx, originalErr),
      │  swallow, return ctx
      └─ if not registered: re-throw the original error (ctx.err stays set)
   └─ finally: set ts.out + execTime, decrement inflight, hook.onExec.finally(ctx)
 ```
 
-Timing fields sourced from caller hints (`ts.clientIn`, `ts.ingressIn`, `ts.owd`) are `-1` when the hints are absent — never fake fallback values.
+Timing fields sourced from caller hints (`ts.clientIn`, `ts.ingressIn`, `ts.owd`) are `-1` when the hints are absent — never fake fallback values. `ts.owd` is floored at `0` when a hint _is_ present: a client clock running ahead of the server's would otherwise report a negative one-way delay. `ts.clientIn` itself is never clamped — it reports the hint as given.
 
-`ctx` is mutated in place throughout. Middleware and handlers must return the same `ctx` they received (returning a new object will work but is not the convention used in the codebase).
+`ctx` is mutated in place throughout. Middleware and handlers must return the same `ctx` they received (returning a new object works — it just has to be a ctx-shaped object — but is not the convention used in the codebase). Returning `undefined`/`null`/a non-object/an object without `meta` throws `INVALID_HANDLER_RETURN`, so the error hook, the finally hook, and the inflight decrement all still run.
 
 ### Hooks (`router.hook.onExec.*`)
 
@@ -176,12 +181,15 @@ Things to know:
 - **Strict concatenation, no implicit delimiter.** `route("/user").route("/:id")` ⇒ `"/user/:id"`, but `route("user").route(":id")` ⇒ `"user:id"` (no `/` inserted). Choose your delimiter in the segment string.
 - **HTTP grammar (strict).** A segment may be `pattern` (no whitespace), `METHOD` (method-only), or `METHOD pattern` (method token leading, single pattern token). Method tokens (`GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS`) are matched case-insensitively and normalized to an uppercase `op`. Any other whitespace shape throws `MALFORMED_SEGMENT` (so `route("/files delete")` is rejected, not registered as `DELETE /files`). A second method token anywhere in the chain throws `MULTIPLE_HTTP_METHODS`; a chain with only a method and no pattern throws `EMPTY_ROUTE_PATTERN`.
 - **Duplicate registration throws.** Registering the same op + pattern twice throws `DUPLICATE_ROUTE` — no silent overwrite or shadowing.
-- **Op-less routes are wildcards.** Routes registered without a method match any `op` (exact and param patterns alike); an op-specific exact route wins over an op-less one for the same raw. A request without an `op` only matches op-less routes.
+- **`.to()` is atomic.** All segment variants of a builder scope are validated (grammar, pattern, duplicates against existing storage _and_ against each other) before any of them is stored. If one variant is rejected — `DUPLICATE_ROUTE`, `MALFORMED_SEGMENT`, `MULTIPLE_HTTP_METHODS`, `EMPTY_ROUTE_PATTERN` — the router keeps **none** of the batch. Two variants that collapse to the same op + pattern (e.g. `route("/a", "/a")`) are a `DUPLICATE_ROUTE` too.
+- **Op-less routes are wildcards.** Routes registered without a method match any `op` (exact and param patterns alike); an op-specific route wins over an op-less one for the same raw — for exact routes (map lookup order) and for param/splat routes (sort order). A request without an `op` only matches op-less routes.
+- **Splats (`*name`) are supported**, exactly as in Express 5 / path-to-regexp v8: they capture one or more trailing segments and the merged `ctx.req.data[name]` is a **`string[]`** of decoded segments (not a string). Splat patterns are stored as param routes even though they contain no `:`; a `:param` outranks an equally sized splat (see specificity below).
+- **Optional groups (`{...}`) are supported** too, again matching Express 5 / path-to-regexp v8: `route("GET /opt{/x}")` matches both `/opt` and `/opt/x`. Groups capture nothing by themselves, but a group may wrap params (`/u/:id{/detail}`).
 - **Cartesian variant expansion.** `route("/user", "user").route("GET /:id", ".:id")` registers the handler under **all four** segment combinations. Use this when you want the same handler reachable via multiple syntaxes (e.g. slash form + dot form).
 - **Builder is immutable.** Each `.route()` / `.via()` returns a new builder; the original is unaffected. Reuse safely.
 - **`router.via(...)` returns a restricted scope** with only `route` and `via` exposed (no direct `.to()`) — you must `.route(...)` before terminating with `.to(handler)`.
 - **Param precedence at runtime.** The Express adapter does `{ ...req.params, ...req.query, ...req.body }`, so for any key collision **body overrides query, and query overrides path params** (last spread wins — body is the highest-priority input). Then on match, the router does `{ ...matchedParams, ...ctx.req.data }`, so router-extracted `:params` have the _lowest_ priority — anything already in `ctx.req.data` with the same key wins. New adapters should follow the same priority for parity.
-- **Pattern storage.** No-`:` patterns go into an exact `Map` keyed by `"op\0pattern"` (or plain `"pattern"` for op-less wildcard routes; `\0` is `EXACT_KEY_DELIMITER` in `router/types.ts`). Patterns with `:` are sorted by (more static chars > fewer params > longer pattern > lexical) and matched in order; specificity is computed once at registration and cached on the entry.
+- **Pattern storage.** Whether a pattern is dynamic is decided by **path-to-regexp's own parser**, not by string sniffing: `parse(pattern)` is called once at registration and the pattern is static only if it tokenizes to a single `text` token. Anything else (`:param`, `*splat`, `{group}`) is dynamic. Static patterns go into an exact `Map` keyed by `"op\0pattern"` (or plain `"pattern"` for op-less wildcard routes; `\0` is `EXACT_KEY_DELIMITER` in `router/types.ts`). Dynamic patterns are sorted by (more static chars > fewer dynamic tokens > fewer splats > longer pattern > **op-specific before op-less** > lexical pattern > lexical op) and matched in order; specificity is computed once at registration and cached on the entry. The `TokenData` from that single `parse()` is handed straight to `match()`, so the pattern is never parsed twice. Static-char counting ignores `:param`/`*splat` tokens **and** the `{`/`}` group delimiters — only literal path characters count.
 
 ## Handler convention
 
@@ -230,8 +238,8 @@ throw appErr.auth.UNAUTHORIZED({ data: { userId }, info: { ip } });
 
 - `CtxBaseError` instances expose `{ name, message, data, info, stack }`.
 - `data` is client-safe (intended to be sent in `ctx.res.data`); `info` is server-side-only debugging context.
-- `CtxRouterError` is internal (thrown via `ctxRouterErr` for framework conditions like `HANDLER_NOT_FOUND`, `MALFORMED_ROUTE_PATH`, `HOOKS_ALREADY_SEALED`, `DUPLICATE_ROUTE`, `MULTIPLE_HTTP_METHODS`, `MALFORMED_SEGMENT`, etc.). Distinguish in your error hook with `instanceof` if you want different handling (e.g. map `HANDLER_NOT_FOUND` to 404).
-- `exec()` normalizes every caught error to a `CtxBaseError` (wrapping non-`CtxBaseError` values as `UNKNOWN_ERROR`), assigns it to `ctx.err`, and — when an error hook is registered — pre-fills `ctx.res.{code,msg,data}` from it before the hook runs.
+- `CtxRouterError` is internal (thrown via `ctxRouterErr` for framework conditions like `HANDLER_NOT_FOUND`, `MALFORMED_ROUTE_PATH`, `INVALID_HANDLER_RETURN`, `HOOKS_ALREADY_SEALED`, `DUPLICATE_ROUTE`, `MULTIPLE_HTTP_METHODS`, `MALFORMED_SEGMENT`, etc.). Distinguish in your error hook with `instanceof` if you want different handling (e.g. map `HANDLER_NOT_FOUND` to 404).
+- `exec()` normalizes every caught error to a `CtxBaseError` (wrapping non-`CtxBaseError` values as `UNKNOWN_ERROR` with the original thrown value preserved at `info.cause`), assigns it to `ctx.err`, and — when an error hook is registered — pre-fills `ctx.res.{code,msg,data}` from it before the hook runs (`res.data` is a shallow copy of `err.data`, so hook mutations never leak back into the error).
 
 ## Adding a new transport adapter
 
@@ -246,13 +254,13 @@ Required:
 Optional:
 
 - `ctx.req.auth` — extract any standard credentials you can.
-- `ctx.req.caller` — extract caller-provided identity (appVersion, apiVersion, sessionId, deviceId) and per-call correlation (traceId, spanId, seq, ts, ingressIn, traceparent) hints. Numeric hints (`ts`, `ingressIn`, `seq`) are epoch-ms / plain numbers parsed strictly with `Number()` — malformed values are dropped, never truncated.
+- `ctx.req.caller` — extract caller-provided identity (appVersion, apiVersion, sessionId, deviceId) and per-call correlation (traceId, spanId, seq, ts, ingressIn, traceparent) hints. Numeric hints (`ts`, `ingressIn`, `seq`) are epoch-ms / plain counters: only a **non-negative decimal integer** (`/^\d+$/` after trimming, within `Number.MAX_SAFE_INTEGER`) is accepted. Bare `Number()` is not good enough — it turns `"0x10"` into 16, `"1e3"` into 1000 and `" "` into 0. Malformed values are dropped, never coerced or truncated.
 
 Reference: `src/adapter/express.v5.ts` (note: its signature is `(ctx, req, res)` because it stashes the response object in `transport.raw` for downstream use). Export new adapters from `src/index.ts` under the `CtxAdapter` namespace.
 
 ## TypeScript config (notes that affect edits)
 
-- `target: ES2021`, `module/moduleResolution: NodeNext`, ESM-aware. `"sideEffects": false` is set in `package.json` and is accurate — no module in `src/` has import-time side effects; keep it that way.
+- `target: ES2021`, `module/moduleResolution: NodeNext`, ESM-aware. `"sideEffects": false` is set in `package.json` and is accurate — no module in `src/` starts timers, registers listeners, or mutates anything external at import time (`common/helper.ts` does read `process.cpuUsage()`/`Date.now()` into module-local state on import, which is harmless); keep it that way.
 - `strict` plus `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `noPropertyAccessFromIndexSignature`. Optional properties must be conditionally assigned (see how `enrichFromExpress` only assigns `auth`/`client`/`caller` when non-empty).
 - `experimentalDecorators` + `emitDecoratorMetadata` are on, but not currently used in `src/`.
 

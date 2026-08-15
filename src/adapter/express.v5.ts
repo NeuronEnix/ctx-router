@@ -35,19 +35,25 @@ type ParsedAuthorization =
 function parseAuthorization(raw: string | undefined): ParsedAuthorization {
   if (!raw) return null;
 
-  if (raw.startsWith("Bearer ")) {
-    const token = raw.slice(7).trim();
-    return token ? { kind: "bearer", token } : null;
+  // RFC 9110: the auth-scheme token is case-insensitive. The credentials that
+  // follow are NOT - they are passed through byte-for-byte (only surrounding
+  // whitespace is trimmed).
+  const sep = raw.indexOf(" ");
+  if (sep === -1) return null;
+  const scheme = raw.slice(0, sep).toLowerCase();
+  const credentials = raw.slice(sep + 1).trim();
+
+  if (scheme === "bearer") {
+    return credentials ? { kind: "bearer", token: credentials } : null;
   }
 
-  if (raw.startsWith("Basic ")) {
-    const encoded = raw.slice(6).trim();
-    if (!encoded) return null;
-    const decoded = Buffer.from(encoded, "base64").toString("utf8");
-    const sep = decoded.indexOf(":");
-    if (sep === -1) return null;
-    const clientId = decoded.slice(0, sep);
-    const clientSecret = decoded.slice(sep + 1);
+  if (scheme === "basic") {
+    if (!credentials) return null;
+    const decoded = Buffer.from(credentials, "base64").toString("utf8");
+    const colon = decoded.indexOf(":");
+    if (colon === -1) return null;
+    const clientId = decoded.slice(0, colon);
+    const clientSecret = decoded.slice(colon + 1);
     if (!clientId) return null;
     return { kind: "basic", clientId, clientSecret };
   }
@@ -57,11 +63,33 @@ function parseAuthorization(raw: string | undefined): ParsedAuthorization {
 
 const API_KEY_HEADERS = ["x-ctx-api-key", "x-api-key", "apikey"] as const;
 
+// Non-negative decimal integer, surrounding whitespace tolerated.
+const DECIMAL_INTEGER_RE = /^\d+$/;
+
+/**
+ * Parses a numeric caller hint (epoch ms or a plain counter).
+ *
+ * `Number()` is far too permissive for header input - it happily turns
+ * "0x10" into 16, "1e3" into 1000 and " " into 0. Only a plain non-negative
+ * decimal integer is accepted; everything else is dropped so a malformed
+ * hint can never masquerade as a real timestamp.
+ *
+ * @param raw - Header value, if present
+ * @returns The parsed number, or undefined when the hint is absent/invalid
+ */
+function parseCount(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (!DECIMAL_INTEGER_RE.test(trimmed)) return undefined;
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) ? value : undefined;
+}
+
 /**
  * Enriches an existing context with Express request data.
  * Modifies ctx in-place.
  *
- * @param ctx - Context created by router.getNewCtx()
+ * @param ctx - Context created by router.newCtx()
  * @param req - Express request object
  */
 export function enrichFromExpress(
@@ -95,14 +123,12 @@ export function enrichFromExpress(
   const traceId = getHeader(req.headers, "x-ctx-trace-id");
   const spanId = getHeader(req.headers, "x-ctx-span-id");
   const traceparent = getHeader(req.headers, "traceparent");
-  // Numeric hints are epoch ms / integers; strict Number() parsing so
-  // malformed values are dropped instead of silently truncated
-  const seqStr = getHeader(req.headers, "x-ctx-seq");
-  const seq = seqStr ? Number(seqStr) : undefined;
-  const tsStr = getHeader(req.headers, "x-ctx-client-ts");
-  const ts = tsStr ? Number(tsStr) : undefined;
-  const ingressInStr = getHeader(req.headers, "x-ctx-ingress-in");
-  const ingressIn = ingressInStr ? Number(ingressInStr) : undefined;
+  // Numeric hints are epoch ms / plain counters: only non-negative decimal
+  // integers are accepted (see parseCount). Hex, exponent, float, signed and
+  // otherwise malformed values are dropped, never coerced or truncated.
+  const seq = parseCount(getHeader(req.headers, "x-ctx-seq"));
+  const ts = parseCount(getHeader(req.headers, "x-ctx-client-ts"));
+  const ingressIn = parseCount(getHeader(req.headers, "x-ctx-ingress-in"));
 
   if (appVersion) caller.appVersion = appVersion;
   if (apiVersion) caller.apiVersion = apiVersion;
@@ -111,10 +137,10 @@ export function enrichFromExpress(
   if (traceId) caller.traceId = traceId;
   if (spanId) caller.spanId = spanId;
   if (traceparent) caller.traceparent = traceparent;
-  if (seq !== undefined && Number.isFinite(seq)) caller.seq = seq;
-  if (ts !== undefined && Number.isFinite(ts)) caller.ts = ts;
-  if (ingressIn !== undefined && Number.isFinite(ingressIn))
-    caller.ingressIn = ingressIn;
+  // parseCount already rejected everything that isn't a safe integer
+  if (seq !== undefined) caller.seq = seq;
+  if (ts !== undefined) caller.ts = ts;
+  if (ingressIn !== undefined) caller.ingressIn = ingressIn;
 
   // Raw headers escape hatch — copied so consumers don't need to reach into transport.raw.
   let hasHeaders = false;

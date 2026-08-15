@@ -471,6 +471,81 @@ describe("CtxRouter", () => {
       expect(noOpCtx.res.data).toEqual({ op: null });
     });
 
+    it("op-specific param route wins over op-less param route", async () => {
+      router.route("/user/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "wildcard", id: (ctx.req.data as any).id };
+        return ctx;
+      });
+      router.route("GET /user/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "get", id: (ctx.req.data as any).id };
+        return ctx;
+      });
+
+      const getCtx = router.newCtx();
+      setRoute(getCtx, "GET", "/user/1");
+      await router.exec(getCtx);
+      expect(getCtx.res.data).toEqual({ matched: "get", id: "1" });
+
+      const postCtx = router.newCtx();
+      setRoute(postCtx, "POST", "/user/2");
+      await router.exec(postCtx);
+      expect(postCtx.res.data).toEqual({ matched: "wildcard", id: "2" });
+
+      const noOpCtx = router.newCtx();
+      setRoute(noOpCtx, undefined, "/user/3");
+      await router.exec(noOpCtx);
+      expect(noOpCtx.res.data).toEqual({ matched: "wildcard", id: "3" });
+    });
+
+    it("op precedence for param routes is independent of registration order", async () => {
+      // Op-specific registered FIRST this time - sorting, not insertion order,
+      // must decide the winner
+      router.route("GET /order/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "get" };
+        return ctx;
+      });
+      router.route("/order/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "wildcard" };
+        return ctx;
+      });
+
+      const getCtx = router.newCtx();
+      setRoute(getCtx, "GET", "/order/1");
+      await router.exec(getCtx);
+      expect(getCtx.res.data).toEqual({ matched: "get" });
+
+      const putCtx = router.newCtx();
+      setRoute(putCtx, "PUT", "/order/2");
+      await router.exec(putCtx);
+      expect(putCtx.res.data).toEqual({ matched: "wildcard" });
+    });
+
+    it("keeps op-specific param routes separated per op", async () => {
+      router.route("/thing/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "wildcard" };
+        return ctx;
+      });
+      router.route("GET /thing/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "get" };
+        return ctx;
+      });
+      router.route("DELETE /thing/:id").to(async (ctx) => {
+        ctx.res.data = { matched: "delete" };
+        return ctx;
+      });
+
+      for (const [op, matched] of [
+        ["GET", "get"],
+        ["DELETE", "delete"],
+        ["POST", "wildcard"],
+      ] as const) {
+        const ctx = router.newCtx();
+        setRoute(ctx, op, "/thing/9");
+        await router.exec(ctx);
+        expect(ctx.res.data).toEqual({ matched });
+      }
+    });
+
     it("op-specific exact route wins over op-less exact route", async () => {
       router.route("/status").to(async (ctx) => {
         ctx.res.data = { matched: "wildcard" };
@@ -490,6 +565,552 @@ describe("CtxRouter", () => {
       setRoute(postCtx, "POST", "/status");
       await router.exec(postCtx);
       expect(postCtx.res.data).toEqual({ matched: "wildcard" });
+    });
+  });
+
+  describe("Splat (*) patterns", () => {
+    it("matches a multi-segment tail and exposes it as an array", async () => {
+      router.route("GET /files/*path").to(async (ctx) => {
+        ctx.res.data = {
+          path: (ctx.req.data as any).path,
+          pattern: ctx.req.route.pattern,
+        };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/a/b/c.txt");
+      await router.exec(ctx);
+
+      // path-to-regexp v8 returns splat params as an array of segments
+      expect((ctx.req.data as any).path).toEqual(["a", "b", "c.txt"]);
+      expect(ctx.req.route.pattern).toBe("/files/*path");
+      expect(ctx.res.data).toEqual({
+        path: ["a", "b", "c.txt"],
+        pattern: "/files/*path",
+      });
+    });
+
+    it("matches a single-segment tail as a one-element array", async () => {
+      router.route("GET /files/*path").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/only.txt");
+      await router.exec(ctx);
+
+      expect((ctx.req.data as any).path).toEqual(["only.txt"]);
+    });
+
+    it("percent-decodes splat segments", async () => {
+      router.route("GET /files/*path").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/a%20b/c");
+      await router.exec(ctx);
+
+      expect((ctx.req.data as any).path).toEqual(["a b", "c"]);
+    });
+
+    it("requires at least one segment for a bare splat", async () => {
+      router.route("GET /files/*path").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files");
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
+    });
+
+    it("respects op on splat routes", async () => {
+      router.route("GET /files/*path").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "POST", "/files/a/b");
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
+    });
+
+    it("op-less splat routes match any op", async () => {
+      router.route("/assets/*rest").to(async (ctx) => {
+        ctx.res.data = { op: ctx.req.route.op ?? null };
+        return ctx;
+      });
+
+      for (const op of ["GET", "POST", undefined]) {
+        const ctx = router.newCtx();
+        setRoute(ctx, op, "/assets/img/logo.png");
+        await router.exec(ctx);
+        expect(ctx.res.data).toEqual({ op: op ?? null });
+        expect((ctx.req.data as any).rest).toEqual(["img", "logo.png"]);
+      }
+    });
+
+    it("op-specific splat route wins over op-less splat route", async () => {
+      router.route("/pub/*rest").to(async (ctx) => {
+        ctx.res.data = { matched: "wildcard" };
+        return ctx;
+      });
+      router.route("GET /pub/*rest").to(async (ctx) => {
+        ctx.res.data = { matched: "get" };
+        return ctx;
+      });
+
+      const getCtx = router.newCtx();
+      setRoute(getCtx, "GET", "/pub/a/b");
+      await router.exec(getCtx);
+      expect(getCtx.res.data).toEqual({ matched: "get" });
+
+      const postCtx = router.newCtx();
+      setRoute(postCtx, "POST", "/pub/a/b");
+      await router.exec(postCtx);
+      expect(postCtx.res.data).toEqual({ matched: "wildcard" });
+    });
+
+    it("more static patterns outrank splats", async () => {
+      router.route("GET /files/*path").to(async (ctx) => {
+        ctx.res.data = { matched: "splat" };
+        return ctx;
+      });
+      router.route("GET /files/config/*path").to(async (ctx) => {
+        ctx.res.data = { matched: "config" };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/config/a/b");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "config" });
+
+      const other = router.newCtx();
+      setRoute(other, "GET", "/files/other/a");
+      await router.exec(other);
+      expect(other.res.data).toEqual({ matched: "splat" });
+    });
+
+    it("a single-segment :param outranks an equally sized splat", async () => {
+      // Register the splat first so insertion order would favour it
+      router.route("GET /doc/*path").to(async (ctx) => {
+        ctx.res.data = { matched: "splat" };
+        return ctx;
+      });
+      router.route("GET /doc/:name").to(async (ctx) => {
+        ctx.res.data = { matched: "param" };
+        return ctx;
+      });
+
+      const single = router.newCtx();
+      setRoute(single, "GET", "/doc/readme.md");
+      await router.exec(single);
+      expect(single.res.data).toEqual({ matched: "param" });
+
+      // Multi-segment paths can only be served by the splat
+      const deep = router.newCtx();
+      setRoute(deep, "GET", "/doc/a/b/c");
+      await router.exec(deep);
+      expect(deep.res.data).toEqual({ matched: "splat" });
+    });
+
+    it("exact routes still beat splat routes", async () => {
+      router.route("GET /files/*path").to(async (ctx) => {
+        ctx.res.data = { matched: "splat" };
+        return ctx;
+      });
+      router.route("GET /files/manifest").to(async (ctx) => {
+        ctx.res.data = { matched: "exact" };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/manifest");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "exact" });
+    });
+
+    it("splat params keep the lowest merge priority", async () => {
+      router.route("GET /files/*path").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/a/b");
+      ctx.req.data = { path: "from-body" };
+      await router.exec(ctx);
+
+      expect((ctx.req.data as any).path).toBe("from-body");
+    });
+
+    it("throws DUPLICATE_ROUTE when the same splat route is registered twice", () => {
+      const handler = async (ctx: TDefaultCtx) => ctx;
+      router.route("GET /files/*path").to(handler);
+      expect(() => router.route("GET /files/*path").to(handler)).toThrow(
+        "already registered"
+      );
+    });
+
+    it("throws MALFORMED_ROUTE_PATH when a splat segment cannot be decoded", async () => {
+      router.route("GET /files/*path").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/files/100%/x");
+
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "MALFORMED_ROUTE_PATH",
+      });
+    });
+
+    it("supports an optional splat group", async () => {
+      router.route("GET /opt{/*path}").to(async (ctx) => {
+        ctx.res.data = { path: (ctx.req.data as any).path ?? null };
+        return ctx;
+      });
+
+      const bare = router.newCtx();
+      setRoute(bare, "GET", "/opt");
+      await router.exec(bare);
+      expect(bare.res.data).toEqual({ path: null });
+
+      const deep = router.newCtx();
+      setRoute(deep, "GET", "/opt/a/b");
+      await router.exec(deep);
+      expect(deep.res.data).toEqual({ path: ["a", "b"] });
+    });
+  });
+
+  describe("Optional group ({...}) patterns", () => {
+    it("matches with and without the optional group", async () => {
+      router.route("GET /opt{/x}").to(async (ctx) => {
+        ctx.res.data = { pattern: ctx.req.route.pattern };
+        return ctx;
+      });
+
+      const bare = router.newCtx();
+      setRoute(bare, "GET", "/opt");
+      await router.exec(bare);
+      expect(bare.res.data).toEqual({ pattern: "/opt{/x}" });
+
+      const withGroup = router.newCtx();
+      setRoute(withGroup, "GET", "/opt/x");
+      await router.exec(withGroup);
+      expect(withGroup.res.data).toEqual({ pattern: "/opt{/x}" });
+    });
+
+    it("does not match a different tail", async () => {
+      router.route("GET /opt{/x}").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/opt/y");
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
+    });
+
+    it("respects op on group patterns", async () => {
+      router.route("GET /opt{/x}").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "POST", "/opt");
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
+    });
+
+    it("op-specific group route wins over op-less group route", async () => {
+      router.route("/grp{/x}").to(async (ctx) => {
+        ctx.res.data = { matched: "wildcard" };
+        return ctx;
+      });
+      router.route("GET /grp{/x}").to(async (ctx) => {
+        ctx.res.data = { matched: "get" };
+        return ctx;
+      });
+
+      const getCtx = router.newCtx();
+      setRoute(getCtx, "GET", "/grp/x");
+      await router.exec(getCtx);
+      expect(getCtx.res.data).toEqual({ matched: "get" });
+
+      const postCtx = router.newCtx();
+      setRoute(postCtx, "POST", "/grp/x");
+      await router.exec(postCtx);
+      expect(postCtx.res.data).toEqual({ matched: "wildcard" });
+    });
+
+    it("exact routes still beat group routes", async () => {
+      router.route("GET /opt{/x}").to(async (ctx) => {
+        ctx.res.data = { matched: "group" };
+        return ctx;
+      });
+      router.route("GET /opt").to(async (ctx) => {
+        ctx.res.data = { matched: "exact" };
+        return ctx;
+      });
+
+      const exactCtx = router.newCtx();
+      setRoute(exactCtx, "GET", "/opt");
+      await router.exec(exactCtx);
+      expect(exactCtx.res.data).toEqual({ matched: "exact" });
+
+      // The group route still serves the tail the exact route cannot
+      const tailCtx = router.newCtx();
+      setRoute(tailCtx, "GET", "/opt/x");
+      await router.exec(tailCtx);
+      expect(tailCtx.res.data).toEqual({ matched: "group" });
+    });
+
+    it("throws DUPLICATE_ROUTE for the same group pattern and op", () => {
+      const handler = async (ctx: TDefaultCtx) => ctx;
+      router.route("GET /opt{/x}").to(handler);
+      expect(() => router.route("GET /opt{/x}").to(handler)).toThrow(
+        "already registered"
+      );
+    });
+
+    it("allows the same group pattern under different ops", async () => {
+      router.route("GET /opt{/x}").to(async (ctx) => {
+        ctx.res.data = { matched: "get" };
+        return ctx;
+      });
+      router.route("POST /opt{/x}").to(async (ctx) => {
+        ctx.res.data = { matched: "post" };
+        return ctx;
+      });
+
+      const postCtx = router.newCtx();
+      setRoute(postCtx, "POST", "/opt/x");
+      await router.exec(postCtx);
+      expect(postCtx.res.data).toEqual({ matched: "post" });
+    });
+
+    it("combines groups with params", async () => {
+      router.route("GET /u/:id{/detail}").to(async (ctx) => {
+        ctx.res.data = { id: (ctx.req.data as any).id };
+        return ctx;
+      });
+
+      const bare = router.newCtx();
+      setRoute(bare, "GET", "/u/7");
+      await router.exec(bare);
+      expect(bare.res.data).toEqual({ id: "7" });
+
+      const detail = router.newCtx();
+      setRoute(detail, "GET", "/u/7/detail");
+      await router.exec(detail);
+      expect(detail.res.data).toEqual({ id: "7" });
+    });
+
+    it("does not count braces as static characters when ranking", async () => {
+      // Both patterns match "/m/a/b/c". Counting "{" and "}" as static chars
+      // would give the 3-group pattern 14 static chars vs 12 and let it win;
+      // only the literal text counts, so the 8-char literal loses to the
+      // 10-char one.
+      router.route("GET /m{/a}{/b}{/c}").to(async (ctx) => {
+        ctx.res.data = { matched: "groups" };
+        return ctx;
+      });
+      router.route("GET /m/a/b/c{/d}").to(async (ctx) => {
+        ctx.res.data = { matched: "literal" };
+        return ctx;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/m/a/b/c");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "literal" });
+    });
+
+    it("keeps truly static patterns on the exact path", async () => {
+      // A pattern with no dynamic token must still land in the exact map:
+      // registering it twice collides, and a sibling path does not match.
+      const handler = async (ctx: TDefaultCtx) => {
+        ctx.res.data = { matched: "static" };
+        return ctx;
+      };
+      router.route("GET /plain/static").to(handler);
+      expect(() => router.route("GET /plain/static").to(handler)).toThrow(
+        "already registered"
+      );
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/plain/static");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "static" });
+
+      const miss = router.newCtx();
+      setRoute(miss, "GET", "/plain/static/extra");
+      await expect(router.exec(miss)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
+    });
+  });
+
+  describe("Ctx return contract", () => {
+    const badHandler = (async () => undefined) as unknown as (
+      ctx: TDefaultCtx
+    ) => Promise<TDefaultCtx>;
+
+    it("throws INVALID_HANDLER_RETURN when a handler returns undefined", async () => {
+      router.route("GET /bad").to(badHandler);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/bad");
+
+      await expect(router.exec(ctx)).rejects.toBeInstanceOf(CtxRouterError);
+      expect(ctx.err?.name).toBe("INVALID_HANDLER_RETURN");
+      expect(ctx.err?.data).toMatchObject({
+        stage: "handler",
+        pattern: "/bad",
+        returned: "undefined",
+      });
+    });
+
+    it("routes INVALID_HANDLER_RETURN through the error hook", async () => {
+      const events: string[] = [];
+      router.hook.onExec.error(() => {
+        events.push("error");
+      });
+      router.hook.onExec.finally(() => {
+        events.push("finally");
+      });
+      router.route("GET /bad").to(badHandler);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/bad");
+      const returned = await router.exec(ctx);
+
+      expect(returned).toBe(ctx);
+      expect(ctx.res.code).toBe("INVALID_HANDLER_RETURN");
+      expect(ctx.err).toBeInstanceOf(CtxRouterError);
+      expect(events).toEqual(["error", "finally"]);
+      // finally block completed: timing was written
+      expect(ctx.meta.ts.out).toBeGreaterThan(0);
+      expect(ctx.meta.ts.execTime).toBeGreaterThanOrEqual(0);
+    });
+
+    it("does not leak inflight when a handler returns a non-ctx value", async () => {
+      router.route("GET /bad").to(badHandler);
+      router.route("GET /good").to(async (ctx) => ctx);
+
+      const bad = router.newCtx();
+      setRoute(bad, "GET", "/bad");
+      expect(bad).toBeDefined();
+      await expect(router.exec(bad)).rejects.toMatchObject({
+        name: "INVALID_HANDLER_RETURN",
+      });
+
+      const good = router.newCtx();
+      setRoute(good, "GET", "/good");
+      await router.exec(good);
+
+      // Inflight was released by the failed exec, so this request sees 1
+      expect(good.meta.instance.inflight).toBe(1);
+    });
+
+    it("does not leak inflight when the error hook swallows the failure", async () => {
+      router.hook.onExec.error(() => {});
+      router.route("GET /bad").to(badHandler);
+      router.route("GET /good").to(async (ctx) => ctx);
+
+      const bad = router.newCtx();
+      setRoute(bad, "GET", "/bad");
+      await router.exec(bad);
+
+      const good = router.newCtx();
+      setRoute(good, "GET", "/good");
+      await router.exec(good);
+
+      expect(good.meta.instance.inflight).toBe(1);
+    });
+
+    it("throws INVALID_HANDLER_RETURN when a middleware returns undefined", async () => {
+      const badMw = (async () => undefined) as unknown as (
+        ctx: TDefaultCtx
+      ) => Promise<TDefaultCtx>;
+      let handlerRan = false;
+
+      router
+        .route("GET /badmw")
+        .via(badMw)
+        .to(async (ctx) => {
+          handlerRan = true;
+          return ctx;
+        });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/badmw");
+
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "INVALID_HANDLER_RETURN",
+        data: { stage: "middleware", index: 0, pattern: "/badmw" },
+      });
+      expect(handlerRan).toBe(false);
+    });
+
+    it("reports the offending middleware index", async () => {
+      const okMw = async (ctx: TDefaultCtx) => ctx;
+      const badMw = (async () => null) as unknown as (
+        ctx: TDefaultCtx
+      ) => Promise<TDefaultCtx>;
+
+      router
+        .route("GET /mw2")
+        .via(okMw, badMw)
+        .to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/mw2");
+
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "INVALID_HANDLER_RETURN",
+        data: { stage: "middleware", index: 1, returned: "null" },
+      });
+    });
+
+    it("rejects non-ctx objects and primitives", async () => {
+      const cases: unknown[] = [null, undefined, 42, "ctx", true, {}, []];
+
+      for (const value of cases) {
+        const localRouter = new CtxRouter<TDefaultCtx>({ logLevel: "none" });
+        localRouter.route("GET /x").to(
+          (async () => value) as unknown as (
+            ctx: TDefaultCtx
+          ) => Promise<TDefaultCtx>
+        );
+
+        const ctx = localRouter.newCtx();
+        setRoute(ctx, "GET", "/x");
+        await expect(localRouter.exec(ctx)).rejects.toMatchObject({
+          name: "INVALID_HANDLER_RETURN",
+        });
+      }
+    });
+
+    it("still accepts a different object that satisfies the ctx shape", async () => {
+      router.route("GET /clone").to(async (ctx) => ({ ...ctx }));
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/clone");
+      const returned = await router.exec(ctx);
+
+      expect(returned).not.toBe(ctx);
+      expect(returned.meta.ts.out).toBeGreaterThan(0);
+    });
+
+    it("also applies to param and splat routes", async () => {
+      router.route("GET /p/:id").to(badHandler);
+      router.route("GET /s/*rest").to(badHandler);
+
+      const paramCtx = router.newCtx();
+      setRoute(paramCtx, "GET", "/p/1");
+      await expect(router.exec(paramCtx)).rejects.toMatchObject({
+        name: "INVALID_HANDLER_RETURN",
+        data: { pattern: "/p/:id" },
+      });
+
+      const splatCtx = router.newCtx();
+      setRoute(splatCtx, "GET", "/s/a/b");
+      await expect(router.exec(splatCtx)).rejects.toMatchObject({
+        name: "INVALID_HANDLER_RETURN",
+        data: { pattern: "/s/*rest" },
+      });
     });
   });
 
@@ -549,6 +1170,132 @@ describe("CtxRouter", () => {
     it("allows the same pattern under different ops", () => {
       router.route("GET /same").to(handler);
       expect(() => router.route("POST /same").to(handler)).not.toThrow();
+    });
+  });
+
+  describe("Atomic route registration", () => {
+    const handler = async (ctx: TDefaultCtx) => ctx;
+
+    async function expectNotRegistered(
+      op: string | undefined,
+      raw: string
+    ): Promise<void> {
+      const ctx = router.newCtx();
+      setRoute(ctx, op, raw);
+      await expect(router.exec(ctx)).rejects.toMatchObject({
+        name: "HANDLER_NOT_FOUND",
+      });
+    }
+
+    it("registers nothing when a later variant duplicates an existing route", async () => {
+      router.route("GET /dup").to(async (ctx) => {
+        ctx.res.data = { matched: "original" };
+        return ctx;
+      });
+
+      expect(() =>
+        router.route("GET /fresh", "GET /dup").to(async (ctx) => {
+          ctx.res.data = { matched: "batch" };
+          return ctx;
+        })
+      ).toThrow("already registered");
+
+      // The good variant of the rejected batch must NOT be registered
+      await expectNotRegistered("GET", "/fresh");
+
+      // The pre-existing route is untouched
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/dup");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "original" });
+    });
+
+    it("rejects a batch that duplicates itself (exact patterns)", async () => {
+      expect(() => router.route("/a", "/a").to(handler)).toThrow(
+        "already registered"
+      );
+      await expectNotRegistered(undefined, "/a");
+    });
+
+    it("rejects a batch that duplicates itself (param patterns)", async () => {
+      expect(() => router.route("GET /p/:id", "GET /p/:id").to(handler)).toThrow(
+        "already registered"
+      );
+      await expectNotRegistered("GET", "/p/1");
+    });
+
+    it("rejects a batch whose cartesian expansion collides", async () => {
+      // "/x" + "/:id" and "/x/" + ":id" both build the pattern "/x/:id"
+      expect(() =>
+        router.route("/x", "/x/").route("GET /:id", "GET :id").to(handler)
+      ).toThrow("already registered");
+      await expectNotRegistered("GET", "/x/1");
+    });
+
+    it("registers nothing when a later variant has malformed grammar", async () => {
+      expect(() => router.route("/ok", "/bad seg").to(handler)).toThrow(
+        "Route segment must be"
+      );
+      await expectNotRegistered(undefined, "/ok");
+    });
+
+    it("registers nothing when a later variant declares two methods", async () => {
+      expect(() =>
+        router.route("/a", "GET /b").route("POST /c").to(handler)
+      ).toThrow("more than one HTTP method");
+      await expectNotRegistered("POST", "/a/c");
+    });
+
+    it("registers nothing when a later variant has an empty pattern", async () => {
+      expect(() => router.route("/ok", "GET").to(handler)).toThrow(
+        "Route pattern is empty"
+      );
+      await expectNotRegistered(undefined, "/ok");
+    });
+
+    it("commits every variant when the whole batch is valid", async () => {
+      router.route("/v1", "/v2").route("GET /:id").to(async (ctx) => {
+        ctx.res.data = {
+          pattern: ctx.req.route.pattern,
+          id: (ctx.req.data as any).id,
+        };
+        return ctx;
+      });
+
+      for (const prefix of ["/v1", "/v2"]) {
+        const ctx = router.newCtx();
+        setRoute(ctx, "GET", `${prefix}/9`);
+        await router.exec(ctx);
+        expect(ctx.res.data).toEqual({ pattern: `${prefix}/:id`, id: "9" });
+      }
+    });
+
+    it("leaves param-route ordering intact after a rejected batch", async () => {
+      router.route("GET /o/:id/detail").to(async (ctx) => {
+        ctx.res.data = { matched: "detail" };
+        return ctx;
+      });
+      router.route("GET /o/:id/:action").to(async (ctx) => {
+        ctx.res.data = { matched: "generic" };
+        return ctx;
+      });
+
+      expect(() =>
+        router.route("GET /o/:id/fresh", "GET /o/:id/detail").to(handler)
+      ).toThrow("already registered");
+
+      // Specificity ordering still holds
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/o/1/detail");
+      await router.exec(ctx);
+      expect(ctx.res.data).toEqual({ matched: "detail" });
+
+      // "/o/:id/fresh" was never stored - had it been, it would outrank the
+      // generic route (more static chars) and win here
+      const fresh = router.newCtx();
+      setRoute(fresh, "GET", "/o/1/fresh");
+      await router.exec(fresh);
+      expect(fresh.res.data).toEqual({ matched: "generic" });
     });
   });
 
@@ -641,6 +1388,59 @@ describe("CtxRouter", () => {
 
       expect(ctx.res.code).toBe("CUSTOM");
       expect(ctx.res.msg).toBe("custom msg");
+    });
+
+    it("preserves the original thrown value in info.cause", async () => {
+      const original = new Error("kaput");
+      router.hook.onExec.error(async () => {});
+      router.route("GET /fail").to(async () => {
+        throw original;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await router.exec(ctx);
+
+      expect(ctx.err?.name).toBe("UNKNOWN_ERROR");
+      expect(ctx.err?.info?.cause).toBe(original);
+      expect((ctx.err?.info?.cause as Error).stack).toBeDefined();
+    });
+
+    it("preserves non-Error thrown values in info.cause", async () => {
+      const original = { code: 42 };
+      router.hook.onExec.error(async () => {});
+      router.route("GET /fail").to(async () => {
+        throw original;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await router.exec(ctx);
+
+      expect(ctx.err?.info?.cause).toBe(original);
+    });
+
+    it("copies err.data into res.data instead of aliasing it", async () => {
+      const thrown = new TestAppErr({
+        name: "MY_ERROR",
+        msg: "boom",
+        data: { a: 1 },
+      });
+      router.hook.onExec.error(async (ctx) => {
+        ctx.res.data.b = 2;
+      });
+      router.route("GET /fail").to(async () => {
+        throw thrown;
+      });
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/fail");
+      await router.exec(ctx);
+
+      expect(ctx.res.data).toEqual({ a: 1, b: 2 });
+      expect(ctx.res.data).not.toBe(thrown.data);
+      // The error's own client-safe payload must be untouched
+      expect(thrown.data).toEqual({ a: 1 });
     });
 
     it("re-throws and still sets ctx.err when no error hook is registered", async () => {
@@ -743,6 +1543,21 @@ describe("CtxRouter", () => {
       expect(ctx.meta.ts.clientIn).toBe(clientTs);
       expect(ctx.meta.ts.ingressIn).toBe(clientTs + 10);
       expect(ctx.meta.ts.owd).toBeGreaterThanOrEqual(50);
+    });
+
+    it("floors owd at 0 when the client clock runs ahead", async () => {
+      router.route("GET /skew").to(async (ctx) => ctx);
+
+      const ctx = router.newCtx();
+      setRoute(ctx, "GET", "/skew");
+      const futureTs = Date.now() + 60_000;
+      ctx.req.caller = { ts: futureTs };
+
+      await router.exec(ctx);
+
+      // clientIn is reported as-is; only the derived delay is clamped
+      expect(ctx.meta.ts.clientIn).toBe(futureTs);
+      expect(ctx.meta.ts.owd).toBe(0);
     });
 
     it("populates cpu/mem stats during exec", async () => {

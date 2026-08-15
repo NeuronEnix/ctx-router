@@ -15,8 +15,15 @@ export type TRoute<TUserCtx extends TDefaultCtx> = {
 export type TRouteEntry<TUserCtx extends TDefaultCtx> = {
   route: TRoute<TUserCtx>;
   segments: string[]; // Track original segments for logging
-  // Computed once at registration so sorting never re-derives it
-  specificity: { staticCount: number; paramCount: number; len: number };
+  // Computed once at registration so sorting never re-derives it.
+  // paramCount counts every dynamic token (`:param` and `*splat`);
+  // splatCount counts only the `*splat` ones.
+  specificity: {
+    staticCount: number;
+    paramCount: number;
+    splatCount: number;
+    len: number;
+  };
 };
 
 // Side-effect hooks - mutate ctx directly, no return needed

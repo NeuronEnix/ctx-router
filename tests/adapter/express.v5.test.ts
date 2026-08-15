@@ -171,6 +171,88 @@ describe("enrichFromExpress", () => {
       expect(ctx.req.auth?.clientSecret).toBeUndefined();
     });
 
+    it("matches the bearer scheme case-insensitively (RFC 9110)", () => {
+      for (const scheme of ["Bearer", "bearer", "BEARER", "BeArEr"]) {
+        const localCtx = router.newCtx();
+        const req = createMockRequest({
+          headers: { authorization: `${scheme} AbC123-TokEn` },
+        });
+
+        enrichFromExpress(localCtx, req, res);
+
+        // Scheme is case-insensitive; the credential is byte-for-byte intact
+        expect(localCtx.req.auth?.bearerToken).toBe("AbC123-TokEn");
+      }
+    });
+
+    it("matches the basic scheme case-insensitively (RFC 9110)", () => {
+      const encoded = Buffer.from("My-Id:My-Secret").toString("base64");
+      for (const scheme of ["Basic", "basic", "BASIC", "BaSiC"]) {
+        const localCtx = router.newCtx();
+        const req = createMockRequest({
+          headers: { authorization: `${scheme} ${encoded}` },
+        });
+
+        enrichFromExpress(localCtx, req, res);
+
+        expect(localCtx.req.auth?.clientId).toBe("My-Id");
+        expect(localCtx.req.auth?.clientSecret).toBe("My-Secret");
+      }
+    });
+
+    it("does not alter the case of base64 Basic credentials", () => {
+      // Base64 is case-sensitive: lowercasing it would corrupt the decode
+      const encoded = Buffer.from("Zz:Aa").toString("base64");
+      const req = createMockRequest({
+        headers: { authorization: `bAsIc ${encoded}` },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.clientId).toBe("Zz");
+      expect(ctx.req.auth?.clientSecret).toBe("Aa");
+    });
+
+    it("ignores an Authorization header with no scheme separator", () => {
+      const req = createMockRequest({
+        headers: { authorization: "Bearerabc123" },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth).toBeUndefined();
+    });
+
+    it("ignores a scheme with empty credentials", () => {
+      const req = createMockRequest({
+        headers: { authorization: "bearer   " },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth).toBeUndefined();
+    });
+
+    it("tolerates extra whitespace between scheme and credentials", () => {
+      const req = createMockRequest({
+        headers: { authorization: "Bearer   spaced-token  " },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth?.bearerToken).toBe("spaced-token");
+    });
+
+    it("ignores a leading-whitespace Authorization header", () => {
+      const req = createMockRequest({
+        headers: { authorization: " Bearer abc" },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.auth).toBeUndefined();
+    });
+
     it("ignores unknown Authorization schemes", () => {
       const req = createMockRequest({
         headers: { authorization: "Digest realm=foo" },
@@ -360,6 +442,82 @@ describe("enrichFromExpress", () => {
       enrichFromExpress(ctx, req, res);
 
       expect(ctx.req.caller?.ingressIn).toBeUndefined();
+    });
+
+    it("accepts only non-negative decimal integers for numeric hints", () => {
+      const rejected = [
+        "0x10", // hex would coerce to 16
+        "1e3", // exponent would coerce to 1000
+        "-5", // signed
+        "+5",
+        "1.5", // float
+        "1.0",
+        " ", // whitespace-only would coerce to 0
+        "",
+        "abc",
+        "12abc",
+        "Infinity",
+        "NaN",
+        "1_000",
+        "9007199254740993", // beyond Number.MAX_SAFE_INTEGER
+      ];
+
+      for (const value of rejected) {
+        const localCtx = router.newCtx();
+        const req = createMockRequest({
+          headers: {
+            "x-ctx-client-ts": value,
+            "x-ctx-ingress-in": value,
+            "x-ctx-seq": value,
+          },
+        });
+
+        enrichFromExpress(localCtx, req, res);
+
+        expect(localCtx.req.caller?.ts).toBeUndefined();
+        expect(localCtx.req.caller?.ingressIn).toBeUndefined();
+        expect(localCtx.req.caller?.seq).toBeUndefined();
+      }
+    });
+
+    it("accepts plain decimal integers, including zero", () => {
+      const accepted: Array<[string, number]> = [
+        ["0", 0],
+        ["7", 7],
+        ["1704110400000", 1704110400000],
+        ["0042", 42], // leading zeros are still a decimal integer
+      ];
+
+      for (const [value, expected] of accepted) {
+        const localCtx = router.newCtx();
+        const req = createMockRequest({
+          headers: {
+            "x-ctx-client-ts": value,
+            "x-ctx-ingress-in": value,
+            "x-ctx-seq": value,
+          },
+        });
+
+        enrichFromExpress(localCtx, req, res);
+
+        expect(localCtx.req.caller?.ts).toBe(expected);
+        expect(localCtx.req.caller?.ingressIn).toBe(expected);
+        expect(localCtx.req.caller?.seq).toBe(expected);
+      }
+    });
+
+    it("trims surrounding whitespace around numeric hints", () => {
+      const req = createMockRequest({
+        headers: {
+          "x-ctx-client-ts": "  1704110400000  ",
+          "x-ctx-seq": "\t12\n",
+        },
+      });
+
+      enrichFromExpress(ctx, req, res);
+
+      expect(ctx.req.caller?.ts).toBe(1704110400000);
+      expect(ctx.req.caller?.seq).toBe(12);
     });
 
     it("does not set req.caller.ts when x-ctx-client-ts is missing", () => {

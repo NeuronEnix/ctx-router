@@ -43,7 +43,7 @@ export type CtxReq<Data = Record<string, unknown>> = {
      * - Event: "order.:id.created"
      * - gRPC: "pkg.Service.:method"
      *
-     * Initially set to "PENDING" by createCtx().
+     * Initially set to "PENDING" by newCtx().
      * Router reassigns to matched pattern after route matching.
      */
     pattern: string;

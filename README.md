@@ -138,7 +138,9 @@ router.route("GET /user/:id"); // op: "GET", pattern: "/user/:id"
 router.route("/files delete"); // throws MALFORMED_SEGMENT
 ```
 
-**Wildcards & duplicates.** Routes registered without a method match any `op`; an op-specific route wins over the wildcard for the same path. Registering the same op + pattern twice throws `DUPLICATE_ROUTE`.
+**Wildcards & duplicates.** Routes registered without a method match any `op`; an op-specific route wins over the wildcard for the same path — for exact and `:param`/`*splat` patterns alike. Registering the same op + pattern twice throws `DUPLICATE_ROUTE`.
+
+**Registration is atomic.** When one `.to()` expands to several patterns (see variants below), every variant is validated before any is stored — so a rejected batch leaves the router exactly as it was, never half-registered.
 
 **Strict concatenation & variants.** Chained `route()` calls concatenate segments exactly as written — no implicit `/`. Passing multiple segments to one `route()` call registers the handler under every combination (cartesian product across chained calls).
 
@@ -170,6 +172,19 @@ router.route("GET /user/:userId/post/:postId").to(async (ctx) => {
   return ctx;
 });
 ```
+
+**Splats.** `*name` patterns work exactly as in Express 5 / `path-to-regexp` v8: they capture one or more trailing segments, and the value merged into `ctx.req.data` is the **array of segments** (already percent-decoded). A single-segment `:param` outranks an equally specific splat, so the splat only wins when nothing more specific matches.
+
+```typescript
+router.route("GET /files/*path").to(async (ctx) => {
+  // GET /files/a/b/c.txt -> ctx.req.data.path === ["a", "b", "c.txt"]
+  return ctx;
+});
+```
+
+**Optional groups.** `{...}` marks an optional part of the pattern, as in Express 5 — `route("GET /opt{/x}")` serves both `/opt` and `/opt/x`. Groups may wrap params (`/u/:id{/detail}`).
+
+**Return the ctx.** Every middleware and handler must return the `ctx` object. Returning `undefined` (or anything that isn't a ctx) throws `INVALID_HANDLER_RETURN` — a `CtxErr.RouterError` that flows through your error hook like any other failure, instead of corrupting the request lifecycle.
 
 ## Lifecycle hooks
 
@@ -232,7 +247,9 @@ router.hook.onExec.error(async (ctx, err) => {
 });
 ```
 
-Your adapter can then map `ctx.res.code` to a transport status (`NOT_FOUND` → 404, `MALFORMED_ROUTE_PATH` → 400, …).
+Your adapter can then map `ctx.res.code` to a transport status (`NOT_FOUND` → 404, `MALFORMED_ROUTE_PATH` → 400, `INVALID_HANDLER_RETURN` → 500, …).
+
+When a non-`CtxErr.BaseError` value is thrown, the router wraps it as `UNKNOWN_ERROR` and keeps the original value (stack included) at `ctx.err.info.cause` — server-side only, never in `ctx.res`.
 
 ## Express adapter
 
@@ -245,8 +262,8 @@ The adapter populates `ctx.req` from the Express request:
 
 - **`data`** — merged `params + query + body` (body wins on collisions)
 - **`route`** — `op: req.method`, `raw: req.path`
-- **`auth`** — `Authorization: Bearer …` (→ `bearerToken`) or `Authorization: Basic …` (→ `clientId`/`clientSecret`); API key from `x-ctx-api-key` / `x-api-key` / `apikey` (first match); `x-ctx-refresh-token`
-- **`caller`** — identity (`x-ctx-app-version`, `x-ctx-api-version`, `x-ctx-session-id`, `x-ctx-device-id`) plus correlation hints (`x-ctx-trace-id`, `x-ctx-span-id`, `traceparent`, `x-ctx-seq`, `x-ctx-client-ts`, `x-ctx-ingress-in`). Numeric headers (`x-ctx-client-ts`, `x-ctx-ingress-in`, `x-ctx-seq`) are epoch-ms / plain numbers — non-numeric values are dropped.
+- **`auth`** — `Authorization: Bearer …` (→ `bearerToken`) or `Authorization: Basic …` (→ `clientId`/`clientSecret`); the scheme token is matched case-insensitively per RFC 9110, the credentials are passed through untouched. API key from `x-ctx-api-key` / `x-api-key` / `apikey` (first match); `x-ctx-refresh-token`
+- **`caller`** — identity (`x-ctx-app-version`, `x-ctx-api-version`, `x-ctx-session-id`, `x-ctx-device-id`) plus correlation hints (`x-ctx-trace-id`, `x-ctx-span-id`, `traceparent`, `x-ctx-seq`, `x-ctx-client-ts`, `x-ctx-ingress-in`). Numeric headers (`x-ctx-client-ts`, `x-ctx-ingress-in`, `x-ctx-seq`) must be plain non-negative decimal integers (epoch ms / counters); hex, exponent, signed, fractional and otherwise malformed values are dropped rather than coerced.
 - **`transport`** — `protocol: "http"`, `framework: "express"`, `request: { method, path }`, headers copied into `transport.data.headers`, client IP/hops in `network`, native `req`/`res` stashed in `raw`
 
 ## Adding a new transport

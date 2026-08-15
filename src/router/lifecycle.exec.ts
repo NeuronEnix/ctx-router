@@ -11,10 +11,36 @@ import {
 import { STATS } from "../common/const";
 
 /**
+ * Guards the ctx contract at every point where a user function's return value
+ * would replace the live ctx reference.
+ *
+ * A plain-JS middleware/handler that forgets `return ctx` yields `undefined`;
+ * assigning that over the ctx reference would make exec()'s `finally` block
+ * throw a raw TypeError before inflight is decremented — bypassing the error
+ * hook, the finally hook, and leaking the inflight counter forever.
+ *
+ * @param value - Whatever the user function returned
+ * @param data - Client-safe context for the error (stage, pattern, fn name)
+ * @returns The value, narrowed to TUserCtx
+ * @throws CtxRouterError INVALID_HANDLER_RETURN when the value is not a ctx
+ */
+export function assertCtxReturn<TUserCtx extends TDefaultCtx>(
+  value: unknown,
+  data: { [key: string]: string | number | boolean | null }
+): TUserCtx {
+  if (value === null || typeof value !== "object" || !("meta" in value)) {
+    throw ctxRouterErr.handler.INVALID_HANDLER_RETURN({
+      data: { ...data, returned: value === null ? "null" : typeof value },
+    });
+  }
+  return value as TUserCtx;
+}
+
+/**
  * Executes a route handler with full lifecycle hooks.
  * Integrates begin/end logic internally for safe lifecycle management.
  *
- * @param ctx - The context to execute (created via createCtx())
+ * @param ctx - The context to execute (created via newCtx())
  * @param exactRoutes - Map of exact route matches
  * @param paramRoutes - Array of parameterized routes
  * @param hooks - Hook functions to run during execution
@@ -40,7 +66,9 @@ export async function exec<TUserCtx extends TDefaultCtx>(
   // Timing from caller hints; -1 (not a fake value) when unavailable
   const clientIn = ctx.req.caller?.ts ?? -1;
   const ingressIn = ctx.req.caller?.ingressIn ?? -1;
-  const owd = clientIn === -1 ? -1 : inTime - clientIn;
+  // One-way delay, floored at 0: a client clock running ahead of ours would
+  // otherwise report a negative "delay". -1 stays reserved for "no hint".
+  const owd = clientIn === -1 ? -1 : Math.max(0, inTime - clientIn);
 
   // Update context with begin values (replace entire meta object due to readonly properties)
   ctx.id = traceId;
@@ -90,7 +118,10 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       ctx.req.route.pattern = exactMatch.route.pattern;
 
       // 3. USER'S BUSINESS LOGIC
-      ctx = await exactMatch.route.handler(ctx);
+      ctx = assertCtxReturn<TUserCtx>(await exactMatch.route.handler(ctx), {
+        stage: "route",
+        pattern: exactMatch.route.pattern,
+      });
 
       // 4. EXEC AFTER - Runs at end of try block (after handler completes)
       await hooks.onExecAfter?.(ctx);
@@ -120,13 +151,18 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       if (result === false) continue;
 
       // Match found - populate context and execute
-      // Merge matched params into req.data (params have lowest priority)
-      const matchedParams = result.params as Record<string, string>;
+      // Merge matched params into req.data (params have lowest priority).
+      // Values are strings for `:param` and string[] for `*splat` segments,
+      // exactly as path-to-regexp returns them.
+      const matchedParams = result.params as Record<string, unknown>;
       ctx.req.data = { ...matchedParams, ...ctx.req.data };
       ctx.req.route.pattern = route.pattern;
 
       // 3. USER'S BUSINESS LOGIC
-      ctx = await route.handler(ctx);
+      ctx = assertCtxReturn<TUserCtx>(await route.handler(ctx), {
+        stage: "route",
+        pattern: route.pattern,
+      });
 
       // 4. EXEC AFTER - Runs at end of try block (after handler completes)
       await hooks.onExecAfter?.(ctx);
@@ -159,12 +195,9 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       execError instanceof CtxBaseError
         ? execError
         : ctxRouterErr.general.UNKNOWN_ERROR({
-            info: {
-              cause:
-                execError instanceof Error
-                  ? `${execError.name}: ${execError.message}`
-                  : String(execError),
-            },
+            // Keep the original thrown value (stack included). `info` is
+            // server-side-only by design, so nothing here reaches the client.
+            info: { cause: execError },
           });
     ctx.err = normalizedErr;
 
@@ -174,7 +207,9 @@ export async function exec<TUserCtx extends TDefaultCtx>(
       // the hook may override any of these
       ctx.res.code = normalizedErr.name;
       ctx.res.msg = normalizedErr.message;
-      ctx.res.data = normalizedErr.data;
+      // Shallow copy: an error hook mutating ctx.res.data must not mutate
+      // the error's own client-safe payload.
+      ctx.res.data = { ...normalizedErr.data };
       await hooks.onExecError(ctx, execError);
       return ctx;
     }

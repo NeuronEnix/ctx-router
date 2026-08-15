@@ -1,4 +1,4 @@
-import { match as pathMatch } from "path-to-regexp";
+import { match as pathMatch, parse as pathParse } from "path-to-regexp";
 import { TDefaultCtx } from "../core";
 import {
   TRoute,
@@ -10,17 +10,40 @@ import {
   EXACT_KEY_DELIMITER,
 } from "./types";
 import { TRouterInstance, createRouterInstance } from "./instance";
-import { exec as execImpl } from "./lifecycle.exec";
+import { exec as execImpl, assertCtxReturn } from "./lifecycle.exec";
 import { ctxRouterErr } from "./error";
 import { RouteBuilder, TRouteBuilder } from "./builder";
 
 // Symbol for internal access from RouteBuilder
 export const INTERNAL_ROUTER_ACCESS = Symbol("CtxRouter.internal");
 
+// Dynamic pattern tokens (path-to-regexp v8 grammar):
+// `:name` matches a single segment, `*name` matches one or more segments.
+// Used with String#match / String#replace only - both reset lastIndex, so
+// sharing these global regexes across calls is safe.
+const DYNAMIC_TOKEN_RE = /[:*][A-Za-z0-9_]+/g;
+const SPLAT_TOKEN_RE = /\*[A-Za-z0-9_]+/g;
+// `{...}` optional-group delimiters are grammar, not literal path characters.
+const GROUP_DELIMITER_RE = /[{}]/g;
+
 // Factory for creating default hooks
 function createDefaultHooks<TUserCtx extends TDefaultCtx>(): THooks<TUserCtx> {
   return {};
 }
+
+/**
+ * A route that passed every registration check but has not been stored yet.
+ * `RouteBuilder.to()` prepares all of its variants before committing any of
+ * them, so a failure on variant N never leaves variants 1..N-1 registered.
+ */
+type TPreparedRoute<TUserCtx extends TDefaultCtx> = {
+  entry: TRouteEntry<TUserCtx>;
+  // Dynamic patterns (params, splats, optional groups) go to paramRoutes;
+  // purely static ones go to the exact map.
+  isDynamic: boolean;
+  // Map key when static; batch-uniqueness key in both cases.
+  storageKey: string;
+};
 
 export class CtxRouter<TUserCtx extends TDefaultCtx> {
   // Route storage: exact matches (O(1)) and param routes (regex)
@@ -208,36 +231,116 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
 
   // Internal access for RouteBuilder via Symbol
   [INTERNAL_ROUTER_ACCESS] = {
-    registerRouteFrom: this.registerRouteFrom.bind(this),
+    registerRoutesFrom: this.registerRoutesFrom.bind(this),
   };
 
   /**
-   * Registers a route from a builder scope.
+   * Registers every segment variant of a builder scope as one atomic batch.
    * Internal entrypoint used by `RouteBuilder.to()`.
+   *
+   * All variants are validated (grammar, pattern, duplicates against both
+   * existing storage and the rest of the batch) before ANY of them is stored,
+   * so a rejected variant can never leave the router half-registered.
    */
-  private registerRouteFrom(
-    segments: string[],
+  private registerRoutesFrom(
+    segmentVariants: string[][],
     middleware: Array<(ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>>,
     handler: (ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>
   ): void {
-    if (segments.length === 0) {
-      throw ctxRouterErr.router.MISSING_SEGMENTS();
-    }
-
     if (!handler) {
       throw ctxRouterErr.router.MISSING_HANDLER();
     }
 
-    // Compose: middleware chain → handler
+    // One composed pipeline shared by every variant - it reads the matched
+    // pattern off the ctx at runtime, so nothing in it is variant-specific.
+    const composedHandler = this.composeHandler(middleware, handler);
+
+    const prepared: Array<TPreparedRoute<TUserCtx>> = [];
+    // Keys claimed by earlier variants of THIS batch, so two variants that
+    // collapse to the same op + pattern are rejected just like a collision
+    // with an already-registered route. One set covers both storages: a
+    // pattern is statically either dynamic or not, so the two key spaces
+    // can never overlap.
+    const claimedKeys = new Set<string>();
+
+    for (const segments of segmentVariants) {
+      const route = this.prepareRoute(segments, composedHandler);
+
+      if (
+        claimedKeys.has(route.storageKey) ||
+        this.isAlreadyRegistered(route)
+      ) {
+        throw ctxRouterErr.router.DUPLICATE_ROUTE({
+          data: {
+            op: route.entry.route.op ?? null,
+            pattern: route.entry.route.pattern,
+          },
+        });
+      }
+
+      claimedKeys.add(route.storageKey);
+      prepared.push(route);
+    }
+
+    // Everything validated - commit the batch.
+    let addedDynamic = false;
+    for (const route of prepared) {
+      if (route.isDynamic) {
+        this.paramRoutes.push(route.entry);
+        addedDynamic = true;
+      } else {
+        this.exactRoutes.set(route.storageKey, route.entry);
+      }
+    }
+    if (addedDynamic) {
+      this.paramRoutes.sort((a, b) => this.compareParamRouteSpecificity(a, b));
+    }
+  }
+
+  /**
+   * Composes the middleware chain and handler into a single pipeline.
+   */
+  private composeHandler(
+    middleware: Array<(ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>>,
+    handler: (ctx: TUserCtx) => TUserCtx | Promise<TUserCtx>
+  ): (ctx: TUserCtx) => Promise<TUserCtx> {
     const mwChain = [...middleware];
 
+    // Every step's return value is validated so an accidental `undefined`
+    // (a handler that forgot `return ctx`) can never clobber the live ctx
+    // reference - see assertCtxReturn in lifecycle.exec.ts.
     const composedHandler = async (ctx: TUserCtx): Promise<TUserCtx> => {
       let result = ctx;
-      for (const mw of mwChain) {
-        result = await mw(result);
+      for (const [index, mw] of mwChain.entries()) {
+        result = assertCtxReturn<TUserCtx>(await mw(result), {
+          stage: "middleware",
+          index,
+          fn: mw.name || "anonymous",
+          pattern: ctx.req.route.pattern,
+        });
       }
-      return handler(result);
+      return assertCtxReturn<TUserCtx>(await handler(result), {
+        stage: "handler",
+        fn: handler.name || "anonymous",
+        pattern: ctx.req.route.pattern,
+      });
     };
+
+    return composedHandler;
+  }
+
+  /**
+   * Validates one segment variant and builds its storage entry.
+   * Throws on any grammar problem; performs NO duplicate check and stores
+   * nothing - the caller decides when the whole batch may be committed.
+   */
+  private prepareRoute(
+    segments: string[],
+    composedHandler: (ctx: TUserCtx) => Promise<TUserCtx>
+  ): TPreparedRoute<TUserCtx> {
+    if (segments.length === 0) {
+      throw ctxRouterErr.router.MISSING_SEGMENTS();
+    }
 
     // 1. Detect HTTP grammar and extract op + route pattern parts
     const { httpOp, patternSegments } = this.analyzeSegments(segments);
@@ -247,9 +350,18 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
     if (pattern.length === 0) {
       throw ctxRouterErr.router.EMPTY_ROUTE_PATTERN({ data: { segments } });
     }
-    const matcher = pathMatch(pattern, { decode: decodeURIComponent });
 
-    // 3. Build primary route
+    // 3. Tokenize once and reuse: path-to-regexp's own parser decides whether
+    // the pattern is dynamic, so every construct it understands (`:param`,
+    // `*splat`, `{optional group}`) is routed to the matcher rather than being
+    // mistaken for a literal string. Only a lone text token is truly static.
+    const tokenData = pathParse(pattern);
+    const firstToken = tokenData.tokens[0];
+    const isDynamic =
+      tokenData.tokens.length !== 1 || firstToken?.type !== "text";
+    const matcher = pathMatch(tokenData, { decode: decodeURIComponent });
+
+    // 4. Build primary route
     const route: TRoute<TUserCtx> = {
       pattern,
       matcher,
@@ -260,7 +372,33 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
       route.op = httpOp;
     }
 
-    this.addRouteToStorage(route, segments);
+    // Key format: "op\0pattern", or plain "pattern" for op-less (wildcard)
+    // routes. Stores static patterns; also identifies a variant within a batch.
+    const storageKey = route.op
+      ? `${route.op}${EXACT_KEY_DELIMITER}${pattern}`
+      : pattern;
+
+    return {
+      entry: {
+        route,
+        segments,
+        specificity: this.getParamRouteSpecificity(pattern),
+      },
+      isDynamic,
+      storageKey,
+    };
+  }
+
+  /**
+   * Whether a prepared route collides with one already in storage.
+   */
+  private isAlreadyRegistered(route: TPreparedRoute<TUserCtx>): boolean {
+    if (!route.isDynamic) return this.exactRoutes.has(route.storageKey);
+    return this.paramRoutes.some(
+      (e) =>
+        e.route.pattern === route.entry.route.pattern &&
+        e.route.op === route.entry.route.op
+    );
   }
 
   /**
@@ -349,68 +487,36 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
     return segments.join("");
   }
 
-  /**
-   * Adds a route to storage (exact or param).
-   * Registering the same op + pattern twice throws DUPLICATE_ROUTE.
-   */
-  private addRouteToStorage(route: TRoute<TUserCtx>, segments: string[]): void {
-    const entry: TRouteEntry<TUserCtx> = {
-      route,
-      segments,
-      specificity: this.getParamRouteSpecificity(route.pattern),
-    };
-
-    // Check if pattern has params
-    const hasParams = route.pattern.includes(":");
-
-    if (hasParams) {
-      const duplicate = this.paramRoutes.some(
-        (e) => e.route.pattern === route.pattern && e.route.op === route.op
-      );
-      if (duplicate) {
-        throw ctxRouterErr.router.DUPLICATE_ROUTE({
-          data: { op: route.op ?? null, pattern: route.pattern },
-        });
-      }
-
-      // Store in paramRoutes array for regex matching (ordered by specificity)
-      this.paramRoutes.push(entry);
-      this.paramRoutes.sort((a, b) => this.compareParamRouteSpecificity(a, b));
-    } else {
-      // Store in exactRoutes map for O(1) lookup
-      // Key format: "op\0pattern", or plain "pattern" for op-less (wildcard) routes
-      const key = route.op
-        ? `${route.op}${EXACT_KEY_DELIMITER}${route.pattern}`
-        : route.pattern;
-
-      if (this.exactRoutes.has(key)) {
-        throw ctxRouterErr.router.DUPLICATE_ROUTE({
-          data: { op: route.op ?? null, pattern: route.pattern },
-        });
-      }
-
-      this.exactRoutes.set(key, entry);
-    }
-  }
-
   private getParamRouteSpecificity(pattern: string): {
     staticCount: number;
     paramCount: number;
+    splatCount: number;
     len: number;
   } {
-    const paramMatches = pattern.match(/:[A-Za-z0-9_]+/g) ?? [];
-    const paramCount = paramMatches.length;
-    const staticPattern = pattern.replace(/:[A-Za-z0-9_]+/g, "");
+    // `:name` captures one segment, `*name` captures many - both are dynamic
+    // tokens, so neither contributes to the static character count. The `{`/`}`
+    // of an optional group are grammar too; only the literal text inside the
+    // group counts (`/opt{/x}` has 6 static chars: "/opt" + "/x").
+    const paramCount = (pattern.match(DYNAMIC_TOKEN_RE) ?? []).length;
+    const splatCount = (pattern.match(SPLAT_TOKEN_RE) ?? []).length;
+    const staticPattern = pattern
+      .replace(DYNAMIC_TOKEN_RE, "")
+      .replace(GROUP_DELIMITER_RE, "");
     const staticCount = staticPattern.length;
 
-    return { staticCount, paramCount, len: pattern.length };
+    return { staticCount, paramCount, splatCount, len: pattern.length };
   }
 
   /**
    * Sort param routes for predictable matching (Fastify-like):
-   * - more static segments win
-   * - fewer params win
+   * - more static characters win
+   * - fewer dynamic tokens win
+   * - fewer splats win (a `*splat` swallows many segments, so it is strictly
+   *   more generic than a `:param` at the same token count)
    * - longer patterns win
+   * - op-specific routes win over op-less (wildcard) routes, mirroring the
+   *   exact-route rule: an op-less route matches ANY op, so if it sorted first
+   *   it would permanently shadow an equally specific op-specific route
    * - stable tie-breakers (pattern, then op)
    */
   private compareParamRouteSpecificity(
@@ -426,9 +532,19 @@ export class CtxRouter<TUserCtx extends TDefaultCtx> {
     if (aSpec.paramCount !== bSpec.paramCount) {
       return aSpec.paramCount - bSpec.paramCount; // asc
     }
+    if (aSpec.splatCount !== bSpec.splatCount) {
+      return aSpec.splatCount - bSpec.splatCount; // asc
+    }
     if (aSpec.len !== bSpec.len) {
       return bSpec.len - aSpec.len; // desc
     }
+
+    // Op-specific before op-less. An op-less route is a wildcard that matches
+    // every op, so it must never be tried before an equally specific route
+    // that was registered for this exact op.
+    const aHasOp = a.route.op !== undefined;
+    const bHasOp = b.route.op !== undefined;
+    if (aHasOp !== bHasOp) return aHasOp ? -1 : 1;
 
     const patternCmp = a.route.pattern.localeCompare(b.route.pattern);
     if (patternCmp !== 0) return patternCmp;

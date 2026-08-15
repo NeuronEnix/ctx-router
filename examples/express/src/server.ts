@@ -1,5 +1,5 @@
 import express, { Request, Response } from "express";
-import { CtxAdapter } from "ctx-router";
+import { CtxAdapter, CtxErr } from "ctx-router";
 import { router, TCtx } from "./router";
 
 const app = express();
@@ -16,8 +16,18 @@ router.hook.onExec.before(async (ctx) => {
   );
 });
 
+// Shape the error response: without this hook exec() re-throws (fail-fast)
+// and Express would render its default error page instead of ctx.res.
+router.hook.onExec.error(async (ctx, err) => {
+  if (err instanceof CtxErr.RouterError && err.name === "HANDLER_NOT_FOUND") {
+    ctx.res.code = "NOT_FOUND";
+    ctx.res.msg = "Route not found";
+  }
+});
+
 function getHttpCode(ctx: TCtx) {
   if (ctx.res.code === "OK") return 200;
+  if (ctx.res.code === "NOT_FOUND") return 404;
   if (ctx.res.code === "UNKNOWN_ERROR") return 500;
   return 400;
 }
@@ -25,7 +35,7 @@ function getHttpCode(ctx: TCtx) {
 app.use(async (req: Request, res: Response) => {
   // 1. Create context with default values (no side effects)
   const ctx: TCtx = router.newCtx();
-  console.log(`[1. createCtx] Created context with ID: ${ctx.id}`);
+  console.log(`[1. newCtx] Created context with ID: ${ctx.id}`);
 
   // 2. Enrich context with Express request data
   CtxAdapter.enrichFromExpress(ctx, req, res);

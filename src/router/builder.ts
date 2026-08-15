@@ -83,12 +83,12 @@ export class RouteBuilder<
     if (typeof handler !== "function") {
       throw ctxRouterErr.router.INVALID_HANDLER();
     }
-    for (const segments of this.segmentVariants) {
-      this.router[INTERNAL_ROUTER_ACCESS].registerRouteFrom(
-        segments,
-        this.middleware,
-        handler
-      );
-    }
+    // All variants are registered as one atomic batch: if any of them is
+    // rejected, none of them is stored.
+    this.router[INTERNAL_ROUTER_ACCESS].registerRoutesFrom(
+      this.segmentVariants,
+      this.middleware,
+      handler
+    );
   }
 }

@@ -365,5 +365,7 @@ export const ctxRouterErr = ctxErrMap(CtxRouterError, {
   handler: {
     HANDLER_NOT_FOUND: "Handler not found",
     MALFORMED_ROUTE_PATH: "Malformed percent-encoding in route path",
+    INVALID_HANDLER_RETURN:
+      "Middleware and handlers must return the ctx object they received",
   },
 });
